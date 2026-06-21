@@ -12,6 +12,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/api'));
 
 app.get('/health', (_req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));

@@ -25,23 +25,50 @@ router.get('/dining-halls', async (req, res, next) => {
 });
 
 router.post('/meal-plan/generate', async (req, res, next) => {
-  const { school, hall, date, goals, restrictions, menuTypes } = req.body;
-  console.log('[generate] menuTypes received:', JSON.stringify(menuTypes));
-  if (!school || !hall || !goals) {
-    return res.status(400).json({ error: 'school, hall, and goals are required' });
-  }
+  const { school, hall, date, goals, restrictions, menuTypes,
+          breakfastHall, lunchHall, dinnerHall } = req.body;
+  if (!school || !goals)
+    return res.status(400).json({ error: 'school and goals are required' });
+
   try {
     const menuDate = date || new Date().toISOString().split('T')[0];
-    const menu = await nutrislice.getMenu(school, hall, menuDate, menuTypes || []);
-    const totalItems = Object.values(menu).reduce((sum, arr) => sum + arr.length, 0);
+    let menu;
+    const isMultiHall = breakfastHall || lunchHall || dinnerHall;
+
+    if (isMultiHall) {
+      const fallback = breakfastHall || lunchHall || dinnerHall || (hall ? { slug: hall } : null);
+      const hallMap = {
+        breakfast: breakfastHall || fallback,
+        lunch:     lunchHall     || fallback,
+        dinner:    dinnerHall    || fallback,
+      };
+      menu = await nutrislice.getMenuMultiHall(school, hallMap, menuDate);
+    } else {
+      if (!hall) return res.status(400).json({ error: 'hall is required when not using multi-hall mode' });
+      menu = await nutrislice.getMenu(school, hall, menuDate, menuTypes || []);
+    }
+
+    const totalItems = Object.values(menu).reduce((s, a) => s + a.length, 0);
     if (totalItems === 0) {
       return res.status(404).json({
         error: 'No menu data available',
-        detail: 'This dining hall has no menu published for the selected date. The hall may be closed or menus may not be posted yet.',
+        detail: 'These dining halls have no menus published for the selected date. They may be closed or menus may not be posted yet.',
         noMenuData: true,
       });
     }
-    const plan = mealPlanner.generate(menu, goals, restrictions || []);
+
+    const labelItem = (item, h) => h ? { ...item, hallName: h.name || h.slug } : item;
+    const taggedMenu = isMultiHall ? {
+      breakfast: menu.breakfast.map(i => labelItem(i, breakfastHall)),
+      lunch:     menu.lunch.map(i => labelItem(i, lunchHall)),
+      dinner:    menu.dinner.map(i => labelItem(i, dinnerHall)),
+    } : menu;
+
+    const plan = mealPlanner.generate(taggedMenu, goals, restrictions || []);
+    plan.halls = isMultiHall
+      ? { breakfast: breakfastHall, lunch: lunchHall, dinner: dinnerHall }
+      : { breakfast: { slug: hall }, lunch: { slug: hall }, dinner: { slug: hall } };
+
     res.json(plan);
   } catch (err) {
     next(err);

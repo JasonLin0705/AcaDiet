@@ -1,8 +1,12 @@
 const BASE = '/api';
 
 async function request(url, options = {}) {
+  const token = localStorage.getItem('acadiet_token');
   const res = await fetch(BASE + url, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   });
   const data = await res.json().catch(() => ({}));
@@ -16,8 +20,8 @@ export const searchUniversities = (q) =>
 export const getDiningHalls = (school) =>
   request(`/dining-halls?school=${encodeURIComponent(school)}`);
 
-export const generateMealPlan = ({ school, hall, date, goals, restrictions, menuTypes }) =>
+export const generateMealPlan = ({ school, date, goals, restrictions, breakfastHall, lunchHall, dinnerHall }) =>
   request('/meal-plan/generate', {
     method: 'POST',
-    body: JSON.stringify({ school, hall, date, goals, restrictions, menuTypes }),
+    body: JSON.stringify({ school, date, goals, restrictions, breakfastHall, lunchHall, dinnerHall }),
   });
