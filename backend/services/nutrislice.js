@@ -94,6 +94,33 @@ function extractMenuTypes(rawTypes) {
   }).filter(Boolean);
 }
 
+async function fetchMenuTypesForHall(school, hallSlug) {
+  const attempts = [
+    `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menutypes/?exclude-archive=true`,
+    `https://${school}.api.nutrislice.com/menu/api/schools/${hallSlug}/menutypes/`,
+    `https://${school}.api.nutrislice.com/menu/api/menutypes/?school=${hallSlug}`,
+  ];
+  for (const url of attempts) {
+    try {
+      console.log('[fetchMenuTypes] trying', url);
+      const response = await axios.get(url, { timeout: 8000, headers: apiHeaders(school) });
+      const data = response.data;
+      const types = Array.isArray(data) ? data : (data.menu_types || data.results || data.menuTypes || []);
+      if (types.length > 0) {
+        console.log('[fetchMenuTypes] success:', JSON.stringify(types).slice(0, 400));
+        return types.map(mt => ({
+          label: (mt.name || mt.slug || '').toLowerCase(),
+          slug: mt.slug || String(mt.id || ''),
+          id: mt.id,
+        })).filter(mt => mt.slug);
+      }
+    } catch (err) {
+      console.log('[fetchMenuTypes] failed:', err.message);
+    }
+  }
+  return [];
+}
+
 function categorizeMealTypes(menuTypes) {
   const categories = { breakfast: [], lunch: [], dinner: [] };
   const uncategorized = [];
@@ -124,8 +151,12 @@ async function getMenu(school, hallSlug, date, menuTypes = []) {
   const [year, month, day] = date.split('-');
   const results = { breakfast: [], lunch: [], dinner: [] };
 
-  const categories = menuTypes.length > 0
-    ? categorizeMealTypes(menuTypes)
+  let resolvedTypes = menuTypes;
+  if (!resolvedTypes.length) {
+    resolvedTypes = await fetchMenuTypesForHall(school, hallSlug);
+  }
+  const categories = resolvedTypes.length > 0
+    ? categorizeMealTypes(resolvedTypes)
     : { breakfast: [{ slug: 'breakfast' }], lunch: [{ slug: 'lunch' }], dinner: [{ slug: 'dinner' }] };
 
   await Promise.all(Object.entries(categories).map(async ([mealPeriod, types]) => {
