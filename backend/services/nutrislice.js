@@ -94,15 +94,20 @@ function extractMenuTypes(rawTypes) {
 async function getMenuTypes(school, hallSlug) {
   try {
     const url = `https://${school}.api.nutrislice.com/menu/api/schools/${hallSlug}/menu-types/`;
+    console.log('[getMenuTypes] fetching', url);
     const response = await axios.get(url, { timeout: 10000, headers: apiHeaders(school) });
     const data = response.data;
+    console.log('[getMenuTypes] raw data:', JSON.stringify(data).slice(0, 500));
     const types = Array.isArray(data) ? data : (data.menu_types || data.results || []);
-    return types.map(mt => ({
+    const result = types.map(mt => ({
       label: (mt.name || mt.slug || '').toLowerCase(),
       slug: mt.slug || String(mt.id || ''),
       id: mt.id,
     })).filter(mt => mt.slug);
-  } catch {
+    console.log('[getMenuTypes] parsed types:', result);
+    return result;
+  } catch (err) {
+    console.log('[getMenuTypes] error:', err.message);
     return [];
   }
 }
@@ -148,6 +153,7 @@ async function getMenu(school, hallSlug, date) {
     for (const mt of types) {
       try {
         const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
+        console.log(`[getMenu] fetching ${mealPeriod}:`, url);
         const response = await axios.get(url, {
           timeout: 12000,
           headers: apiHeaders(school),
@@ -157,8 +163,8 @@ async function getMenu(school, hallSlug, date) {
         if (todayData) {
           items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
         }
-      } catch {
-        // skip this type
+      } catch (err) {
+        console.log(`[getMenu] error for ${mealPeriod}/${mt.slug}:`, err.message);
       }
     }
     results[mealPeriod] = items;
