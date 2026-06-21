@@ -59,11 +59,19 @@ function searchUniversities(query) {
     .slice(0, 8);
 }
 
+function apiHeaders(school) {
+  return {
+    'Accept': 'application/json',
+    'User-Agent': 'AcaDiet/1.0',
+    'x-nutrislice-origin': `${school}.nutrislice.com`,
+  };
+}
+
 async function getDiningHalls(school) {
-  const url = `https://${school}.nutrislice.com/menu/api/schools/`;
+  const url = `https://${school}.api.nutrislice.com/menu/api/schools/`;
   const response = await axios.get(url, {
     timeout: 10000,
-    headers: { 'Accept': 'application/json', 'User-Agent': 'AcaDiet/1.0' },
+    headers: apiHeaders(school),
   });
   const data = response.data;
   const list = Array.isArray(data) ? data : (data.schools || []);
@@ -90,10 +98,10 @@ async function getMenu(school, hallSlug, date) {
 
   await Promise.all(mealTypes.map(async (mealType) => {
     try {
-      const url = `https://${school}.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mealType}/${year}/${month}/${day}/`;
+      const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mealType}/${year}/${month}/${day}/`;
       const response = await axios.get(url, {
         timeout: 12000,
-        headers: { 'Accept': 'application/json', 'User-Agent': 'AcaDiet/1.0' },
+        headers: apiHeaders(school),
       });
       const days = response.data?.days || [];
       const todayData = days.find(d => d.date === date) || days[Math.floor(days.length / 2)] || days[0];
