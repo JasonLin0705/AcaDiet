@@ -26,6 +26,7 @@ router.get('/dining-halls', async (req, res, next) => {
 
 router.post('/meal-plan/generate', async (req, res, next) => {
   const { school, hall, date, goals, restrictions, menuTypes } = req.body;
+  console.log('[generate] menuTypes received:', JSON.stringify(menuTypes));
   if (!school || !hall || !goals) {
     return res.status(400).json({ error: 'school, hall, and goals are required' });
   }
