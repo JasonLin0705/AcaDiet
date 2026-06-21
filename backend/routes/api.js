@@ -25,13 +25,13 @@ router.get('/dining-halls', async (req, res, next) => {
 });
 
 router.post('/meal-plan/generate', async (req, res, next) => {
-  const { school, hall, date, goals, restrictions } = req.body;
+  const { school, hall, date, goals, restrictions, menuTypes } = req.body;
   if (!school || !hall || !goals) {
     return res.status(400).json({ error: 'school, hall, and goals are required' });
   }
   try {
     const menuDate = date || new Date().toISOString().split('T')[0];
-    const menu = await nutrislice.getMenu(school, hall, menuDate);
+    const menu = await nutrislice.getMenu(school, hall, menuDate, menuTypes || []);
     const plan = mealPlanner.generate(menu, goals, restrictions || []);
     res.json(plan);
   } catch (err) {

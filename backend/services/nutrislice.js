@@ -86,30 +86,11 @@ async function getDiningHalls(school) {
 function extractMenuTypes(rawTypes) {
   if (!Array.isArray(rawTypes)) return [];
   return rawTypes.map(mt => {
-    if (typeof mt === 'string') return mt;
-    return mt.name || mt.slug || String(mt.id || '');
+    if (typeof mt === 'string') return { label: mt.toLowerCase(), slug: mt };
+    const label = (mt.name || mt.slug || '').toLowerCase();
+    const slug = mt.slug || String(mt.id || '');
+    return slug ? { label, slug, id: mt.id } : null;
   }).filter(Boolean);
-}
-
-async function getMenuTypes(school, hallSlug) {
-  try {
-    const url = `https://${school}.api.nutrislice.com/menu/api/schools/${hallSlug}/menu-types/`;
-    console.log('[getMenuTypes] fetching', url);
-    const response = await axios.get(url, { timeout: 10000, headers: apiHeaders(school) });
-    const data = response.data;
-    console.log('[getMenuTypes] raw data:', JSON.stringify(data).slice(0, 500));
-    const types = Array.isArray(data) ? data : (data.menu_types || data.results || []);
-    const result = types.map(mt => ({
-      label: (mt.name || mt.slug || '').toLowerCase(),
-      slug: mt.slug || String(mt.id || ''),
-      id: mt.id,
-    })).filter(mt => mt.slug);
-    console.log('[getMenuTypes] parsed types:', result);
-    return result;
-  } catch (err) {
-    console.log('[getMenuTypes] error:', err.message);
-    return [];
-  }
 }
 
 function categorizeMealTypes(menuTypes) {
@@ -138,12 +119,10 @@ function categorizeMealTypes(menuTypes) {
   return categories;
 }
 
-async function getMenu(school, hallSlug, date) {
+async function getMenu(school, hallSlug, date, menuTypes = []) {
   const [year, month, day] = date.split('-');
   const results = { breakfast: [], lunch: [], dinner: [] };
 
-  // Fetch the school's actual menu types first
-  const menuTypes = await getMenuTypes(school, hallSlug);
   const categories = menuTypes.length > 0
     ? categorizeMealTypes(menuTypes)
     : { breakfast: [{ slug: 'breakfast' }], lunch: [{ slug: 'lunch' }], dinner: [{ slug: 'dinner' }] };

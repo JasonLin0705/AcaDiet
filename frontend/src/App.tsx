@@ -41,6 +41,7 @@ export default function App() {
         date: null,
         goals,
         restrictions,
+        menuTypes: hall.menuTypes || [],
       });
       setMealPlan(plan);
       setStep(3);
@@ -62,6 +63,7 @@ export default function App() {
         date: null,
         goals,
         restrictions,
+        menuTypes: diningHall.menuTypes || [],
       });
       setMealPlan(plan);
     } catch (err: any) {

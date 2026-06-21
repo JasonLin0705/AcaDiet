@@ -16,8 +16,8 @@ export const searchUniversities = (q) =>
 export const getDiningHalls = (school) =>
   request(`/dining-halls?school=${encodeURIComponent(school)}`);
 
-export const generateMealPlan = ({ school, hall, date, goals, restrictions }) =>
+export const generateMealPlan = ({ school, hall, date, goals, restrictions, menuTypes }) =>
   request('/meal-plan/generate', {
     method: 'POST',
-    body: JSON.stringify({ school, hall, date, goals, restrictions }),
+    body: JSON.stringify({ school, hall, date, goals, restrictions, menuTypes }),
   });
