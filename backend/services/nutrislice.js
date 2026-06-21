@@ -75,6 +75,7 @@ async function getDiningHalls(school) {
   });
   const data = response.data;
   const list = Array.isArray(data) ? data : (data.schools || []);
+  if (list.length > 0) console.log('[getDiningHalls] first school raw:', JSON.stringify(list[0]).slice(0, 800));
   return list.map(s => ({
     id: s.id,
     name: s.name,
