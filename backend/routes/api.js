@@ -33,6 +33,14 @@ router.post('/meal-plan/generate', async (req, res, next) => {
   try {
     const menuDate = date || new Date().toISOString().split('T')[0];
     const menu = await nutrislice.getMenu(school, hall, menuDate, menuTypes || []);
+    const totalItems = Object.values(menu).reduce((sum, arr) => sum + arr.length, 0);
+    if (totalItems === 0) {
+      return res.status(404).json({
+        error: 'No menu data available',
+        detail: 'This dining hall has no menu published for the selected date. The hall may be closed or menus may not be posted yet.',
+        noMenuData: true,
+      });
+    }
     const plan = mealPlanner.generate(menu, goals, restrictions || []);
     res.json(plan);
   } catch (err) {

@@ -46,7 +46,10 @@ export default function App() {
       setMealPlan(plan);
       setStep(3);
     } catch (err: any) {
-      setGenError(err.message || 'Failed to generate meal plan');
+      const msg = err.noMenuData
+        ? `No menu data available for ${hall.name}. This dining hall may be closed or menus haven't been published yet. Try a different dining hall or check back later.`
+        : (err.message || 'Failed to generate meal plan');
+      setGenError(msg);
     } finally {
       setGenerating(false);
     }

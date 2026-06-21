@@ -170,21 +170,20 @@ async function getMenu(school, hallSlug, date, menuTypes = []) {
           headers: apiHeaders(school),
         });
         const days = response.data?.days || [];
-        console.log(`[getMenu] ${mealPeriod}/${mt.slug} days:`, days.length, 'keys:', Object.keys(response.data || {}).join(','));
-        const todayData = days.find(d => d.date === date) || days[Math.floor(days.length / 2)] || days[0];
-        if (todayData) {
-          const parsed = parseMenuItems(todayData.menu_items || [], mealPeriod);
-          console.log(`[getMenu] ${mealPeriod} items:`, parsed.length, 'raw menu_items:', todayData.menu_items?.length);
-          items.push(...parsed);
-        } else {
-          console.log(`[getMenu] ${mealPeriod} no todayData, raw response:`, JSON.stringify(response.data).slice(0, 300));
-        }
+        const todayData = days.find(d => d.date === date);
+        if (!todayData) continue;
+        items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
       } catch (err) {
         console.log(`[getMenu] error for ${mealPeriod}/${mt.slug}:`, err.message);
       }
     }
     results[mealPeriod] = items;
   }));
+
+  const totalItems = results.breakfast.length + results.lunch.length + results.dinner.length;
+  if (totalItems === 0) {
+    console.log('[getMenu] No menu items found for', school, hallSlug, date, '— hall may be closed or menus not yet published');
+  }
 
   return results;
 }
@@ -226,7 +225,6 @@ function parseMenuItems(rawItems, mealType) {
       };
     })
     .filter(item => {
-      if (item.calories === 0) return false;
       if (seen.has(item.name)) return false;
       seen.add(item.name);
       return true;

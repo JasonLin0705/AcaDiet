@@ -47,6 +47,8 @@ export default function MealPlanDisplay({ plan, goals, university, diningHall, o
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   const totalItems = breakfast.length + lunch.length + dinner.length;
+  const totalAvailable = (availableCounts?.breakfast ?? 0) + (availableCounts?.lunch ?? 0) + (availableCounts?.dinner ?? 0);
+  const noMenuPublished = totalAvailable === 0;
 
   return (
     <div className="space-y-5">
@@ -71,11 +73,15 @@ export default function MealPlanDisplay({ plan, goals, university, diningHall, o
           </button>
         </div>
 
-        {totalItems === 0 && (
-          <div className="mt-3 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
-            No menu items matched your restrictions today. Try relaxing your dietary filters.
+        {noMenuPublished ? (
+          <div className="mt-3 p-3 bg-orange-50 rounded-xl text-sm text-orange-700">
+            No menu has been published for this dining hall today. It may be closed or menus haven't been posted yet.
           </div>
-        )}
+        ) : totalItems === 0 ? (
+          <div className="mt-3 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
+            No menu items matched your dietary restrictions. Try relaxing your filters.
+          </div>
+        ) : null}
       </div>
 
       {/* Meal sections */}

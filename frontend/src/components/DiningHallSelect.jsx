@@ -107,14 +107,18 @@ export default function DiningHallSelect({ university, goals, restrictions, onSe
                 </div>
                 {hall.menuTypes.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {hall.menuTypes.map((mt) => (
-                      <span
-                        key={mt}
-                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full capitalize"
-                      >
-                        {mt}
-                      </span>
-                    ))}
+                    {hall.menuTypes.map((mt) => {
+                      const label = typeof mt === 'string' ? mt : (mt.label || mt.slug || '');
+                      const key = typeof mt === 'string' ? mt : (mt.slug || mt.label || '');
+                      return (
+                        <span
+                          key={key}
+                          className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full capitalize"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
