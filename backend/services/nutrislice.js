@@ -231,4 +231,43 @@ function parseMenuItems(rawItems, mealType) {
     });
 }
 
-module.exports = { searchUniversities, getDiningHalls, getMenu };
+async function getMenuMultiHall(school, hallMap, date) {
+  const [year, month, day] = date.split('-');
+  const results = { breakfast: [], lunch: [], dinner: [] };
+
+  await Promise.all(Object.entries(hallMap).map(async ([mealPeriod, hall]) => {
+    if (!hall || !hall.slug) return;
+    let menuTypes = hall.menuTypes || [];
+    if (!menuTypes.length) {
+      menuTypes = await fetchMenuTypesForHall(school, hall.slug);
+    }
+    const categories = menuTypes.length > 0
+      ? categorizeMealTypes(menuTypes)
+      : { breakfast: [{ slug: 'breakfast' }], lunch: [{ slug: 'lunch' }], dinner: [{ slug: 'dinner' }] };
+
+    const types = categories[mealPeriod] || [];
+    const items = [];
+    for (const mt of types) {
+      try {
+        const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hall.slug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
+        console.log(`[getMenuMultiHall] ${mealPeriod} from ${hall.slug}:`, url);
+        const response = await axios.get(url, { timeout: 12000, headers: apiHeaders(school) });
+        const days = response.data?.days || [];
+        const todayData = days.find(d => d.date === date);
+        if (!todayData) continue;
+        items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
+      } catch (err) {
+        console.log(`[getMenuMultiHall] error ${mealPeriod}/${mt.slug}:`, err.message);
+      }
+    }
+    results[mealPeriod] = items;
+  }));
+
+  const totalItems = results.breakfast.length + results.lunch.length + results.dinner.length;
+  if (totalItems === 0) {
+    console.log('[getMenuMultiHall] No menu items found — halls may be closed or menus not yet published');
+  }
+  return results;
+}
+
+module.exports = { searchUniversities, getDiningHalls, getMenu, getMenuMultiHall };
