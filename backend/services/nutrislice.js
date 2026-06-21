@@ -91,24 +91,77 @@ function extractMenuTypes(rawTypes) {
   }).filter(Boolean);
 }
 
+async function getMenuTypes(school, hallSlug) {
+  try {
+    const url = `https://${school}.api.nutrislice.com/menu/api/schools/${hallSlug}/menu-types/`;
+    const response = await axios.get(url, { timeout: 10000, headers: apiHeaders(school) });
+    const data = response.data;
+    const types = Array.isArray(data) ? data : (data.menu_types || data.results || []);
+    return types.map(mt => ({
+      label: (mt.name || mt.slug || '').toLowerCase(),
+      slug: mt.slug || String(mt.id || ''),
+      id: mt.id,
+    })).filter(mt => mt.slug);
+  } catch {
+    return [];
+  }
+}
+
+function categorizeMealTypes(menuTypes) {
+  const categories = { breakfast: [], lunch: [], dinner: [] };
+  const uncategorized = [];
+
+  for (const mt of menuTypes) {
+    const l = mt.label;
+    if (l.includes('breakfast') || l.includes('brunch')) {
+      categories.breakfast.push(mt);
+    } else if (l.includes('lunch')) {
+      categories.lunch.push(mt);
+    } else if (l.includes('dinner') || l.includes('supper')) {
+      categories.dinner.push(mt);
+    } else {
+      uncategorized.push(mt);
+    }
+  }
+
+  // If nothing categorized, distribute uncategorized evenly
+  if (uncategorized.length > 0 && Object.values(categories).every(a => a.length === 0)) {
+    const slots = ['breakfast', 'lunch', 'dinner'];
+    uncategorized.forEach((mt, i) => categories[slots[i % 3]].push(mt));
+  }
+
+  return categories;
+}
+
 async function getMenu(school, hallSlug, date) {
   const [year, month, day] = date.split('-');
-  const mealTypes = ['breakfast', 'lunch', 'dinner'];
-  const results = {};
+  const results = { breakfast: [], lunch: [], dinner: [] };
 
-  await Promise.all(mealTypes.map(async (mealType) => {
-    try {
-      const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mealType}/${year}/${month}/${day}/`;
-      const response = await axios.get(url, {
-        timeout: 12000,
-        headers: apiHeaders(school),
-      });
-      const days = response.data?.days || [];
-      const todayData = days.find(d => d.date === date) || days[Math.floor(days.length / 2)] || days[0];
-      results[mealType] = todayData ? parseMenuItems(todayData.menu_items || [], mealType) : [];
-    } catch {
-      results[mealType] = [];
+  // Fetch the school's actual menu types first
+  const menuTypes = await getMenuTypes(school, hallSlug);
+  const categories = menuTypes.length > 0
+    ? categorizeMealTypes(menuTypes)
+    : { breakfast: [{ slug: 'breakfast' }], lunch: [{ slug: 'lunch' }], dinner: [{ slug: 'dinner' }] };
+
+  await Promise.all(Object.entries(categories).map(async ([mealPeriod, types]) => {
+    const items = [];
+    for (const mt of types) {
+      try {
+        const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
+        const response = await axios.get(url, {
+          timeout: 12000,
+          headers: apiHeaders(school),
+        });
+        const days = response.data?.days || [];
+        const todayData = days.find(d => d.date === date) || days[Math.floor(days.length / 2)] || days[0];
+        if (todayData) {
+          items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
+        }
+      } catch {
+        // skip this type
+      }
     }
+    results[mealPeriod] = items;
   }));
 
   return results;
