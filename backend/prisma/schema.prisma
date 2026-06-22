@@ -16,8 +16,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  goals   UserGoals?
-  history MealHistory[]
+  goals     UserGoals?
+  history   MealHistory[]
+  favorites FavoriteFood[]
 
   @@map("users")
 }
@@ -38,19 +39,42 @@ model UserGoals {
 }
 
 model MealHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  date      String
-  school    String
-  hallName  String
-  planJson  String
-  calories  Int
-  protein   Float
-  carbs     Float
-  fat       Float
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  date       String
+  school     String
+  hallName   String
+  planJson   String
+  calories   Int
+  protein    Float
+  carbs      Float
+  fat        Float
+  shareToken String?  @unique
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("meal_history")
+}
+
+model FavoriteFood {
+  id           String   @id @default(cuid())
+  userId       String
+  foodId       String
+  foodName     String
+  calories     Int
+  protein      Float
+  carbs        Float
+  fat          Float
+  isVegetarian Boolean  @default(false)
+  isVegan      Boolean  @default(false)
+  isGlutenFree Boolean  @default(false)
+  isHalal      Boolean  @default(false)
+  isKosher     Boolean  @default(false)
+  addedAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, foodId])
+  @@map("favorite_foods")
 }

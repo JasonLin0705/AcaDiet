@@ -21,4 +21,9 @@ export const authService = {
   saveGoals: (goals) => req('/goals', { method: 'PUT', body: JSON.stringify(goals) }),
   saveHistory: (entry) => req('/history', { method: 'POST', body: JSON.stringify(entry) }),
   getHistory: () => req('/history'),
+  getHistoryStats: () => req('/history/stats'),
+  getFavorites: () => req('/favorites'),
+  addFavorite: (item) => req('/favorites', { method: 'POST', body: JSON.stringify(item) }),
+  removeFavorite: (foodId) => req(`/favorites/${encodeURIComponent(foodId)}`, { method: 'DELETE' }),
+  shareHistory: (id) => req(`/history/${id}/share`, { method: 'POST' }),
 };

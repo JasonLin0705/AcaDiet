@@ -1,6 +1,10 @@
 const router = require('express').Router();
+const { PrismaClient } = require('@prisma/client');
 const nutrislice = require('../services/nutrislice');
 const mealPlanner = require('../services/mealPlanner');
+const { optionalAuth } = require('../auth');
+
+const prisma = new PrismaClient();
 
 router.get('/universities/search', (req, res) => {
   const { q } = req.query;
@@ -24,7 +28,7 @@ router.get('/dining-halls', async (req, res, next) => {
   }
 });
 
-router.post('/meal-plan/generate', async (req, res, next) => {
+router.post('/meal-plan/generate', optionalAuth, async (req, res, next) => {
   const { school, hall, date, goals, restrictions, menuTypes,
           breakfastHall, lunchHall, dinnerHall } = req.body;
   if (!school || !goals)
@@ -64,7 +68,13 @@ router.post('/meal-plan/generate', async (req, res, next) => {
       dinner:    menu.dinner.map(i => labelItem(i, dinnerHall)),
     } : menu;
 
-    const plan = mealPlanner.generate(taggedMenu, goals, restrictions || []);
+    let favorites = [];
+    if (req.userId) {
+      try {
+        favorites = await prisma.favoriteFood.findMany({ where: { userId: req.userId } });
+      } catch {}
+    }
+    const plan = mealPlanner.generate(taggedMenu, goals, restrictions || [], { favorites });
     plan.halls = isMultiHall
       ? { breakfast: breakfastHall, lunch: lunchHall, dinner: dinnerHall }
       : { breakfast: { slug: hall }, lunch: { slug: hall }, dinner: { slug: hall } };
@@ -72,6 +82,19 @@ router.post('/meal-plan/generate', async (req, res, next) => {
     res.json(plan);
   } catch (err) {
     next(err);
+  }
+});
+
+router.get('/share/:token', async (req, res) => {
+  try {
+    const entry = await prisma.mealHistory.findUnique({
+      where: { shareToken: req.params.token },
+      select: { id: true, date: true, school: true, hallName: true, planJson: true, calories: true, protein: true, carbs: true, fat: true },
+    });
+    if (!entry) return res.status(404).json({ error: 'Shared plan not found' });
+    res.json({ ...entry, plan: JSON.parse(entry.planJson), planJson: undefined });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load shared plan' });
   }
 });
 

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const authMiddleware = require('../auth');
 
@@ -134,6 +135,90 @@ router.get('/history', authMiddleware, async (req, res) => {
     res.json({ history: entries.map(e => ({ ...e, plan: JSON.parse(e.planJson) })) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load history' });
+  }
+});
+
+router.get('/history/stats', authMiddleware, async (req, res) => {
+  try {
+    const entries = await prisma.mealHistory.findMany({
+      where: { userId: req.userId },
+      orderBy: { date: 'asc' },
+      take: 30,
+      select: { date: true, calories: true, protein: true, carbs: true, fat: true },
+    });
+    const byDate = {};
+    for (const e of entries) {
+      if (!byDate[e.date]) byDate[e.date] = { date: e.date, calories: 0, protein: 0, carbs: 0, fat: 0 };
+      byDate[e.date].calories += e.calories;
+      byDate[e.date].protein  += e.protein;
+      byDate[e.date].carbs    += e.carbs;
+      byDate[e.date].fat      += e.fat;
+    }
+    res.json({ stats: Object.values(byDate) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load stats' });
+  }
+});
+
+router.get('/favorites', authMiddleware, async (req, res) => {
+  try {
+    const favs = await prisma.favoriteFood.findMany({ where: { userId: req.userId } });
+    res.json({ favorites: favs });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load favorites' });
+  }
+});
+
+router.post('/favorites', authMiddleware, async (req, res) => {
+  const { id, name, calories, protein, carbs, fat,
+          isVegetarian, isVegan, isGlutenFree, isHalal, isKosher } = req.body;
+  if (!id || !name) return res.status(400).json({ error: 'id and name required' });
+  try {
+    const fav = await prisma.favoriteFood.upsert({
+      where: { userId_foodId: { userId: req.userId, foodId: String(id) } },
+      update: { foodName: name, calories: Math.round(calories || 0), protein: protein || 0, carbs: carbs || 0, fat: fat || 0 },
+      create: {
+        userId: req.userId,
+        foodId: String(id),
+        foodName: name,
+        calories: Math.round(calories || 0),
+        protein: protein || 0,
+        carbs: carbs || 0,
+        fat: fat || 0,
+        isVegetarian: isVegetarian || false,
+        isVegan: isVegan || false,
+        isGlutenFree: isGlutenFree || false,
+        isHalal: isHalal || false,
+        isKosher: isKosher || false,
+      },
+    });
+    res.status(201).json({ favorite: fav });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save favorite' });
+  }
+});
+
+router.delete('/favorites/:foodId', authMiddleware, async (req, res) => {
+  try {
+    await prisma.favoriteFood.deleteMany({
+      where: { userId: req.userId, foodId: req.params.foodId },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove favorite' });
+  }
+});
+
+router.post('/history/:id/share', authMiddleware, async (req, res) => {
+  try {
+    const entry = await prisma.mealHistory.findUnique({ where: { id: req.params.id } });
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    if (entry.userId !== req.userId) return res.status(403).json({ error: 'Forbidden' });
+    const shareToken = entry.shareToken || crypto.randomBytes(8).toString('hex');
+    await prisma.mealHistory.update({ where: { id: entry.id }, data: { shareToken } });
+    res.json({ shareToken });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create share link' });
   }
 });
 

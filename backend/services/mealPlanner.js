@@ -13,7 +13,7 @@ function filterByRestrictions(items, restrictions) {
   });
 }
 
-function scoreItem(item, remaining) {
+function scoreItem(item, remaining, favorites = []) {
   const { calories: calBudget, protein, carbs, fat } = remaining;
   if (item.calories > calBudget * 1.15) return -1;
 
@@ -24,10 +24,12 @@ function scoreItem(item, remaining) {
   const calFit = calBudget > 0 ? Math.min(item.calories / calBudget, 1) : 0;
 
   // Weight macros equally; penalize items that are too calorie-dense for remaining budget
-  return (proteinFit + carbsFit + fatFit + calFit) / 4;
+  let score = (proteinFit + carbsFit + fatFit + calFit) / 4;
+  if (favorites.some(f => f.foodId === item.id)) score *= 1.25;
+  return score;
 }
 
-function selectBestItems(items, mealType, goals) {
+function selectBestItems(items, mealType, goals, favorites = []) {
   if (!items.length) return [];
 
   const ratio = MEAL_RATIOS[mealType] || 0.33;
@@ -45,7 +47,7 @@ function selectBestItems(items, mealType, goals) {
 
   for (let i = 0; i < 4 && pool.length > 0; i++) {
     const scored = pool
-      .map((item, idx) => ({ item, idx, score: scoreItem(item, remaining) }))
+      .map((item, idx) => ({ item, idx, score: scoreItem(item, remaining, favorites) }))
       .filter(s => s.score >= 0)
       .sort((a, b) => b.score - a.score);
 
@@ -79,16 +81,17 @@ function sumNutrition(items) {
   );
 }
 
-function generate(menu, goals, restrictions) {
+function generate(menu, goals, restrictions, userContext = {}) {
   const { breakfast = [], lunch = [], dinner = [] } = menu;
+  const { favorites = [] } = userContext;
 
   const filteredBreakfast = filterByRestrictions(breakfast, restrictions);
   const filteredLunch = filterByRestrictions(lunch, restrictions);
   const filteredDinner = filterByRestrictions(dinner, restrictions);
 
-  const selectedBreakfast = selectBestItems(filteredBreakfast, 'breakfast', goals);
-  const selectedLunch = selectBestItems(filteredLunch, 'lunch', goals);
-  const selectedDinner = selectBestItems(filteredDinner, 'dinner', goals);
+  const selectedBreakfast = selectBestItems(filteredBreakfast, 'breakfast', goals, favorites);
+  const selectedLunch = selectBestItems(filteredLunch, 'lunch', goals, favorites);
+  const selectedDinner = selectBestItems(filteredDinner, 'dinner', goals, favorites);
 
   const totals = sumNutrition([...selectedBreakfast, ...selectedLunch, ...selectedDinner]);
 

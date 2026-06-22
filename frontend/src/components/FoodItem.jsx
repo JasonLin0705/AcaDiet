@@ -1,4 +1,4 @@
-export default function FoodItem({ item }) {
+export default function FoodItem({ item, isFavorite = false, onToggleFavorite }) {
   const showVeg = item.isVegetarian && !item.isVegan;
 
   return (
@@ -47,6 +47,23 @@ export default function FoodItem({ item }) {
         <div className="text-xl font-bold text-gray-900">{item.calories}</div>
         <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">kcal</div>
       </div>
+      {onToggleFavorite && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(item); }}
+          className="shrink-0 ml-1 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {isFavorite ? (
+            <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          )}
+        </button>
+      )}
     </div>
   );
 }

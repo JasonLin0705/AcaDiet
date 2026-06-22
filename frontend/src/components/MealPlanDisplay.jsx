@@ -15,7 +15,7 @@ function HallBadge({ name, color }) {
   );
 }
 
-function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, hallColor }) {
+function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, hallColor, favorites, onToggleFavorite }) {
   const totalCals = items.reduce((s, i) => s + (i.calories || 0), 0);
   const pct = targetCals > 0 ? Math.min((totalCals / targetCals) * 100, 100) : 0;
 
@@ -47,7 +47,14 @@ function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, ha
 
       <div className="p-4 space-y-2">
         {items.length > 0 ? (
-          items.map((item) => <FoodItem key={item.id} item={item} />)
+          items.map((item) => (
+            <FoodItem
+              key={item.id}
+              item={item}
+              isFavorite={favorites ? favorites.some(f => f.foodId === String(item.id)) : false}
+              onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item) : undefined}
+            />
+          ))
         ) : (
           <div className="text-center py-8 text-gray-400">
             <p className="text-3xl mb-2">🍽</p>
@@ -88,15 +95,31 @@ function SavedToast({ show }) {
   );
 }
 
-export default function MealPlanDisplay({ plan, goals, university, hallSelections, onRegenerate, onStartOver, generating }) {
+export default function MealPlanDisplay({ plan, goals, university, hallSelections, onRegenerate, onStartOver, generating, favorites, onToggleFavorite, onShare }) {
   const { breakfast = [], lunch = [], dinner = [], totals = {}, availableCounts = {} } = plan;
   const { breakfastHall, lunchHall, dinnerHall } = hallSelections || {};
   const [showToast, setShowToast] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const totalItems = breakfast.length + lunch.length + dinner.length;
   const totalAvailable = (availableCounts.breakfast ?? 0) + (availableCounts.lunch ?? 0) + (availableCounts.dinner ?? 0);
   const noMenuPublished = totalAvailable === 0;
+
+  const handleShare = async () => {
+    if (!onShare) return;
+    setShareLoading(true);
+    try {
+      const url = await onShare();
+      if (url) {
+        await navigator.clipboard.writeText(url);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2500);
+      }
+    } catch {}
+    setShareLoading(false);
+  };
 
   // Show a brief toast if auto-saved (parent triggers via saveHistory)
   useEffect(() => {
@@ -167,6 +190,8 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         hallName={breakfastHall?.name}
         hallColor="amber"
         emptyLabel={availableCounts.breakfast === 0 ? "Breakfast isn't served at this hall today." : "No breakfast items matched your restrictions."}
+        favorites={favorites}
+        onToggleFavorite={onToggleFavorite}
       />
       <MealSection
         title="Lunch"
@@ -176,6 +201,8 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         hallName={lunchHall?.name}
         hallColor="emerald"
         emptyLabel={availableCounts.lunch === 0 ? "Lunch isn't served at this hall today." : "No lunch items matched your restrictions."}
+        favorites={favorites}
+        onToggleFavorite={onToggleFavorite}
       />
       <MealSection
         title="Dinner"
@@ -185,6 +212,8 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         hallName={dinnerHall?.name}
         hallColor="indigo"
         emptyLabel={availableCounts.dinner === 0 ? "Dinner isn't served at this hall today." : "No dinner items matched your restrictions."}
+        favorites={favorites}
+        onToggleFavorite={onToggleFavorite}
       />
 
       {/* Daily totals */}
@@ -219,10 +248,33 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
       <div className="flex gap-3">
         <button
           onClick={onStartOver}
-          className="flex-1 py-3.5 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 active:scale-[0.98] transition-all text-sm"
+          className="py-3.5 px-4 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 active:scale-[0.98] transition-all text-sm"
         >
           Start Over
         </button>
+        {onShare && (
+          <button
+            onClick={handleShare}
+            disabled={shareLoading}
+            className="py-3.5 px-4 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 active:scale-[0.98] transition-all text-sm flex items-center gap-1.5 disabled:opacity-40"
+          >
+            {shareCopied ? (
+              <>
+                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </>
+            )}
+          </button>
+        )}
         <button
           onClick={onRegenerate}
           disabled={generating}

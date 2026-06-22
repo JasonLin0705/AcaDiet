@@ -25,3 +25,6 @@ export const generateMealPlan = ({ school, date, goals, restrictions, breakfastH
     method: 'POST',
     body: JSON.stringify({ school, date, goals, restrictions, breakfastHall, lunchHall, dinnerHall }),
   });
+
+export const getSharedPlan = (token) =>
+  request(`/share/${encodeURIComponent(token)}`);
