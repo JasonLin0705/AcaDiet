@@ -15,14 +15,16 @@ Commit and push the current changes in `/Users/jasonlin/AcaDiet` to GitHub. Foll
    git -C /Users/jasonlin/AcaDiet add -A
    ```
 
-3. Commit:
-   - If the user passed an argument to this skill, use it verbatim as the commit message.
-   - Otherwise, look at `git -C /Users/jasonlin/AcaDiet diff --cached --stat` and write a concise, descriptive message (a short summary line; add a brief body if several areas changed).
-   - **Always end the commit message with this trailer** (exactly):
-     ```
-     Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-     ```
-   - Commit with `git -C /Users/jasonlin/AcaDiet commit -m "..."` (use a heredoc for multi-line messages).
+3. Commit any staged changes (this ALWAYS happens automatically before the push when there's anything to commit):
+   - First check whether there's anything staged: `git -C /Users/jasonlin/AcaDiet diff --cached --quiet`. If it exits **0** (nothing staged — e.g. the working tree was already clean and you're only pushing previously-made commits), **skip this commit step** and go straight to step 4. Do not run `git commit` with nothing staged.
+   - Otherwise, commit:
+     - If the user passed an argument to this skill, use it verbatim as the commit message.
+     - Otherwise, look at `git -C /Users/jasonlin/AcaDiet diff --cached --stat` and write a concise, descriptive message (a short summary line; add a brief body if several areas changed).
+     - **Always end the commit message with this trailer** (exactly):
+       ```
+       Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+       ```
+     - Commit with `git -C /Users/jasonlin/AcaDiet commit -m "..."` (use a heredoc for multi-line messages).
 
 4. Push the current branch to origin:
    ```
