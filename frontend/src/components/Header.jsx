@@ -4,7 +4,10 @@ import LoginModal from './LoginModal';
 import RegisterModal from './RegisterModal';
 import MealHistoryPanel from './MealHistoryPanel';
 
-export default function Header() {
+/**
+ * @param {{ view?: 'plan' | 'today', onChangeView?: (v: 'plan' | 'today') => void }} props
+ */
+export default function Header({ view, onChangeView }) {
   const { user, logout } = useAuth();
   const [modal, setModal] = useState(null); // 'login' | 'register' | 'history' | null
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -27,6 +30,21 @@ export default function Header() {
               <p className="text-[11px] text-emerald-300 mt-0.5">Smart dining hall meals</p>
             </div>
           </div>
+
+          {/* Plan / Today toggle */}
+          {user && view && onChangeView && (
+            <div className="flex items-center bg-white/10 border border-white/10 rounded-xl p-0.5">
+              {['plan', 'today'].map(v => (
+                <button
+                  key={v}
+                  onClick={() => onChangeView(v)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === v ? 'bg-white text-emerald-800 shadow-sm' : 'text-emerald-100 hover:text-white'}`}
+                >
+                  {v === 'plan' ? 'Plan' : 'Today'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Auth controls */}
           <div className="flex items-center gap-2">

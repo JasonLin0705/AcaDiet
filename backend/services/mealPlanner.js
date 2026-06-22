@@ -81,6 +81,40 @@ function sumNutrition(items) {
   );
 }
 
+// Pick a single replacement item for one slot in a meal. `keptItems` are the
+// other items staying in that meal; candidates should already be filtered by
+// restrictions and have the current items excluded. Favorite-aware via scoreItem.
+function selectSwap(items, mealType, goals, keptItems = [], favorites = []) {
+  if (!items.length) return null;
+
+  const ratio = MEAL_RATIOS[mealType] || 0.33;
+  const kept = keptItems.reduce(
+    (a, i) => ({
+      calories: a.calories + (i.calories || 0),
+      protein: a.protein + (i.protein || 0),
+      carbs: a.carbs + (i.carbs || 0),
+      fat: a.fat + (i.fat || 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  // Remaining macro gap the replacement should fill, floored so scoring stays meaningful
+  // even when the kept items already meet/exceed the meal target.
+  const calTarget = goals.calories * ratio;
+  const remaining = {
+    calories: Math.max(calTarget - kept.calories, calTarget * 0.25),
+    protein: Math.max(goals.protein * ratio - kept.protein, 1),
+    carbs: Math.max(goals.carbs * ratio - kept.carbs, 1),
+    fat: Math.max(goals.fat * ratio - kept.fat, 1),
+  };
+
+  const scored = items
+    .map(item => ({ item, score: scoreItem(item, remaining, favorites) }))
+    .sort((a, b) => b.score - a.score);
+
+  return scored.length ? scored[0].item : null;
+}
+
 function generate(menu, goals, restrictions, userContext = {}) {
   const { breakfast = [], lunch = [], dinner = [] } = menu;
   const { favorites = [] } = userContext;
@@ -112,4 +146,4 @@ function generate(menu, goals, restrictions, userContext = {}) {
   };
 }
 
-module.exports = { generate };
+module.exports = { generate, selectSwap, filterByRestrictions, scoreItem, MEAL_RATIOS };

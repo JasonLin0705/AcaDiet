@@ -1,4 +1,4 @@
-export default function FoodItem({ item, isFavorite = false, onToggleFavorite }) {
+export default function FoodItem({ item, isFavorite = false, onToggleFavorite, onSwap, swapping = false }) {
   const showVeg = item.isVegetarian && !item.isVegan;
 
   return (
@@ -47,6 +47,19 @@ export default function FoodItem({ item, isFavorite = false, onToggleFavorite })
         <div className="text-xl font-bold text-gray-900">{item.calories}</div>
         <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">kcal</div>
       </div>
+      {onSwap && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSwap(item); }}
+          disabled={swapping}
+          className="shrink-0 ml-1 p-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+          aria-label="Swap for another item"
+          title="Swap for another item"
+        >
+          <svg className={`w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors ${swapping ? 'animate-spin text-emerald-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      )}
       {onToggleFavorite && (
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(item); }}

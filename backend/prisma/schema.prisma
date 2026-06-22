@@ -19,6 +19,7 @@ model User {
   goals     UserGoals?
   history   MealHistory[]
   favorites FavoriteFood[]
+  foodLogs  FoodLog[]
 
   @@map("users")
 }
@@ -77,4 +78,21 @@ model FavoriteFood {
 
   @@unique([userId, foodId])
   @@map("favorite_foods")
+}
+
+model FoodLog {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String
+  name      String
+  calories  Int
+  protein   Float
+  carbs     Float
+  fat       Float
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("food_logs")
 }

@@ -28,3 +28,6 @@ export const generateMealPlan = ({ school, date, goals, restrictions, breakfastH
 
 export const getSharedPlan = (token) =>
   request(`/share/${encodeURIComponent(token)}`);
+
+export const swapMealItem = (payload) =>
+  request('/meal-plan/swap', { method: 'POST', body: JSON.stringify(payload) });

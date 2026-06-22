@@ -6,14 +6,16 @@ import UniversitySearch from './components/UniversitySearch';
 import GoalForm from './components/GoalForm';
 import DiningHallSelect from './components/DiningHallSelect';
 import MealPlanDisplay from './components/MealPlanDisplay';
+import DailyTracker from './components/DailyTracker';
 import SharedPlanView from './components/SharedPlanView';
-import { generateMealPlan } from './services/api';
+import { generateMealPlan, swapMealItem } from './services/api';
 
 const STEPS = ['University', 'Goals', 'Dining Halls', 'Meal Plan'];
 
 function AppContent() {
-  const { user, loading, saveGoals, saveHistory, getFavorites, addFavorite, removeFavorite, shareHistory } = useAuth();
+  const { user, loading, saveGoals, saveHistory, getFavorites, addFavorite, removeFavorite, shareHistory, addLog } = useAuth();
   const [step, setStep] = useState(0);
+  const [view, setView] = useState<'plan' | 'today'>('plan');
   const [university, setUniversity] = useState<any>(null);
   const [goals, setGoals] = useState<any>(null);
   const [restrictions, setRestrictions] = useState<string[]>([]);
@@ -74,6 +76,11 @@ function AppContent() {
     if (!user) { setFavorites([]); return; }
     getFavorites().then((d: any) => setFavorites(d.favorites || [])).catch(() => {});
   }, [user, getFavorites]);
+
+  // The "Today" tracker requires auth; fall back to the plan view when logged out
+  useEffect(() => {
+    if (!user && view === 'today') setView('plan');
+  }, [user, view]);
 
   const handleUniversitySelect = (uni: any) => {
     setUniversity(uni);
@@ -186,11 +193,73 @@ function AppContent() {
     }
   }, [user, favorites, addFavorite, removeFavorite]);
 
+  const handleSwapItem = useCallback(async (mealType: 'breakfast' | 'lunch' | 'dinner', item: any) => {
+    if (!hallSelections || !mealPlan) return;
+    const hall = hallSelections[`${mealType}Hall`];
+    if (!hall?.slug) return;
+
+    const currentItems = mealPlan[mealType] || [];
+    const keptItems = currentItems.filter((i: any) => String(i.id) !== String(item.id));
+    const excludeIds = currentItems.map((i: any) => i.id);
+
+    const res: any = await swapMealItem({
+      school: university.subdomain,
+      hallSlug: hall.slug,
+      hallName: hall.name,
+      mealType,
+      date: null,
+      menuTypes: hall.menuTypes,
+      goals,
+      restrictions,
+      keptItems,
+      excludeIds,
+    });
+    const replacement = res?.item;
+    if (!replacement) return; // no alternative available
+
+    const labeled = item.hallName ? { ...replacement, hallName: item.hallName } : replacement;
+    const newMeal = currentItems.map((i: any) => String(i.id) === String(item.id) ? labeled : i);
+    const newPlan = { ...mealPlan, [mealType]: newMeal };
+
+    const all = [...(newPlan.breakfast || []), ...(newPlan.lunch || []), ...(newPlan.dinner || [])];
+    newPlan.totals = all.reduce((a: any, i: any) => ({
+      calories: a.calories + (i.calories || 0),
+      protein: a.protein + (i.protein || 0),
+      carbs: a.carbs + (i.carbs || 0),
+      fat: a.fat + (i.fat || 0),
+      fiber: a.fiber + (i.fiber || 0),
+      sodium: a.sodium + (i.sodium || 0),
+    }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sodium: 0 });
+
+    setMealPlan(newPlan);
+  }, [hallSelections, mealPlan, university, goals, restrictions]);
+
   const handleShare = useCallback(async () => {
     if (!planHistoryId) return null;
     const data: any = await shareHistory(planHistoryId);
     return `${window.location.origin}?share=${data.shareToken}`;
   }, [planHistoryId, shareHistory]);
+
+  const handleAddToToday = useCallback(async () => {
+    if (!mealPlan) return;
+    const items = [
+      ...(mealPlan.breakfast || []),
+      ...(mealPlan.lunch || []),
+      ...(mealPlan.dinner || []),
+    ];
+    try {
+      await Promise.all(items.map((item: any) => addLog({
+        name: item.name,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+      })));
+      setView('today');
+    } catch (err) {
+      console.error('Failed to add plan to today:', err);
+    }
+  }, [mealPlan, addLog]);
 
   const initialGoals = user?.goals ? {
     calories: user.goals.calories,
@@ -243,8 +312,12 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/40">
-      <Header />
+      <Header view={view} onChangeView={setView} />
       <main className="max-w-2xl mx-auto px-4 py-8 pb-20">
+        {view === 'today' && user ? (
+          <DailyTracker goals={user.goals} favorites={favorites} />
+        ) : (
+        <>
         <div className="mb-8">
           <StepIndicator steps={STEPS} current={step} />
         </div>
@@ -300,7 +373,11 @@ function AppContent() {
             favorites={user ? favorites : undefined}
             onToggleFavorite={user ? handleToggleFavorite : undefined}
             onShare={planHistoryId ? handleShare : undefined}
+            onSwapItem={handleSwapItem}
+            onAddToToday={user ? handleAddToToday : undefined}
           />
+        )}
+        </>
         )}
       </main>
     </div>

@@ -15,7 +15,7 @@ function HallBadge({ name, color }) {
   );
 }
 
-function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, hallColor, favorites, onToggleFavorite }) {
+function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, hallColor, favorites, onToggleFavorite, onSwap, swappingId }) {
   const totalCals = items.reduce((s, i) => s + (i.calories || 0), 0);
   const pct = targetCals > 0 ? Math.min((totalCals / targetCals) * 100, 100) : 0;
 
@@ -53,6 +53,8 @@ function MealSection({ title, emoji, items, targetCals, emptyLabel, hallName, ha
               item={item}
               isFavorite={favorites ? favorites.some(f => f.foodId === String(item.id)) : false}
               onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item) : undefined}
+              onSwap={onSwap}
+              swapping={swappingId === item.id}
             />
           ))
         ) : (
@@ -95,12 +97,36 @@ function SavedToast({ show }) {
   );
 }
 
-export default function MealPlanDisplay({ plan, goals, university, hallSelections, onRegenerate, onStartOver, generating, favorites, onToggleFavorite, onShare }) {
+export default function MealPlanDisplay({ plan, goals, university, hallSelections, onRegenerate, onStartOver, generating, favorites, onToggleFavorite, onShare, onSwapItem, onAddToToday }) {
   const { breakfast = [], lunch = [], dinner = [], totals = {}, availableCounts = {} } = plan;
   const { breakfastHall, lunchHall, dinnerHall } = hallSelections || {};
   const [showToast, setShowToast] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [swappingId, setSwappingId] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+
+  const handleAddToToday = async () => {
+    if (!onAddToToday || adding) return;
+    setAdding(true);
+    try {
+      await onAddToToday();
+      setAdded(true);
+      setTimeout(() => setAdded(false), 2500);
+    } catch {} finally {
+      setAdding(false);
+    }
+  };
+
+  const handleSwap = async (mealType, item) => {
+    if (!onSwapItem || swappingId) return;
+    setSwappingId(item.id);
+    try { await onSwapItem(mealType, item); } catch {} finally { setSwappingId(null); }
+  };
+  const swapProps = (mealType) => onSwapItem
+    ? { onSwap: (item) => handleSwap(mealType, item), swappingId }
+    : {};
 
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const totalItems = breakfast.length + lunch.length + dinner.length;
@@ -192,6 +218,7 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         emptyLabel={availableCounts.breakfast === 0 ? "Breakfast isn't served at this hall today." : "No breakfast items matched your restrictions."}
         favorites={favorites}
         onToggleFavorite={onToggleFavorite}
+        {...swapProps('breakfast')}
       />
       <MealSection
         title="Lunch"
@@ -203,6 +230,7 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         emptyLabel={availableCounts.lunch === 0 ? "Lunch isn't served at this hall today." : "No lunch items matched your restrictions."}
         favorites={favorites}
         onToggleFavorite={onToggleFavorite}
+        {...swapProps('lunch')}
       />
       <MealSection
         title="Dinner"
@@ -214,6 +242,7 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
         emptyLabel={availableCounts.dinner === 0 ? "Dinner isn't served at this hall today." : "No dinner items matched your restrictions."}
         favorites={favorites}
         onToggleFavorite={onToggleFavorite}
+        {...swapProps('dinner')}
       />
 
       {/* Daily totals */}
@@ -243,6 +272,33 @@ export default function MealPlanDisplay({ plan, goals, university, hallSelection
           </p>
         )}
       </div>
+
+      {/* Add this plan's totals to Today */}
+      {onAddToToday && totalItems > 0 && (
+        <button
+          onClick={handleAddToToday}
+          disabled={adding}
+          className={`w-full py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all shadow-md text-sm flex items-center justify-center gap-2 disabled:opacity-60 ${added ? 'bg-emerald-600 text-white shadow-emerald-200/50' : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-200/50'}`}
+        >
+          {added ? (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+              Added to Today
+            </>
+          ) : adding ? (
+            'Adding…'
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add to Today
+            </>
+          )}
+        </button>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3">

@@ -26,4 +26,8 @@ export const authService = {
   addFavorite: (item) => req('/favorites', { method: 'POST', body: JSON.stringify(item) }),
   removeFavorite: (foodId) => req(`/favorites/${encodeURIComponent(foodId)}`, { method: 'DELETE' }),
   shareHistory: (id) => req(`/history/${id}/share`, { method: 'POST' }),
+  addLog: (entry) => req('/log', { method: 'POST', body: JSON.stringify(entry) }),
+  getLog: (date) => req(`/log${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  getMonthlyLog: (month) => req('/log/monthly' + (month ? '?month=' + encodeURIComponent(month) : '')),
+  removeLog: (id) => req(`/log/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

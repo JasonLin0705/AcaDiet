@@ -29,7 +29,7 @@ const KNOWN_SCHOOLS = [
   { name: 'Boston University', subdomain: 'bu', fullName: 'Boston University' },
   { name: 'Rutgers University', subdomain: 'rutgers', fullName: 'Rutgers University' },
   { name: 'Indiana University', subdomain: 'indiana', fullName: 'Indiana University Bloomington' },
-  { name: 'UW Madison', subdomain: 'wisc', fullName: 'University of Wisconsin-Madison' },
+  { name: 'UW Madison', subdomain: 'wisc-housingdining', fullName: 'University of Wisconsin-Madison' },
   { name: 'University of Oregon', subdomain: 'uoregon', fullName: 'University of Oregon' },
   { name: 'University of Washington', subdomain: 'uw', fullName: 'University of Washington' },
   { name: 'University of Arizona', subdomain: 'arizona', fullName: 'University of Arizona' },
@@ -67,11 +67,49 @@ function apiHeaders(school) {
   };
 }
 
+// Schools list dining halls under varying Nutrislice subdomains — many use a
+// suffix like `-housingdining` rather than the bare school name. Resolve the
+// real subdomain by trying the configured one first, then common variants, and
+// cache the winner so subsequent menu/swap calls stay consistent.
+const subdomainCache = new Map();
+
+async function hasValidHalls(sub) {
+  const url = `https://${sub}.api.nutrislice.com/menu/api/schools/`;
+  const response = await axios.get(url, { timeout: 8000, headers: apiHeaders(sub) });
+  const data = response.data;
+  const list = Array.isArray(data) ? data : (data.schools || []);
+  return list.some(s => s && s.name && s.slug);
+}
+
+async function resolveSubdomain(base) {
+  if (subdomainCache.has(base)) return subdomainCache.get(base);
+
+  // Fast path: the configured subdomain is usually correct (one request).
+  try {
+    if (await hasValidHalls(base)) { subdomainCache.set(base, base); return base; }
+  } catch {
+    // DNS failure / non-dining org — fall through to variants
+  }
+
+  // Fallback: try common dining-subdomain variants in parallel, keep priority order.
+  const variants = [
+    `${base}-housingdining`, `${base}-dining`, `${base}-housing`,
+    `${base}housing`, `${base}dining`,
+  ];
+  const results = await Promise.all(
+    variants.map(async v => { try { return (await hasValidHalls(v)) ? v : null; } catch { return null; } })
+  );
+  const resolved = results.find(Boolean) || base;
+  subdomainCache.set(base, resolved);
+  return resolved;
+}
+
 async function getDiningHalls(school) {
-  const url = `https://${school}.api.nutrislice.com/menu/api/schools/`;
+  const sub = await resolveSubdomain(school);
+  const url = `https://${sub}.api.nutrislice.com/menu/api/schools/`;
   const response = await axios.get(url, {
     timeout: 10000,
-    headers: apiHeaders(school),
+    headers: apiHeaders(sub),
   });
   const data = response.data;
   const list = Array.isArray(data) ? data : (data.schools || []);
@@ -145,12 +183,13 @@ function categorizeMealTypes(menuTypes) {
 }
 
 async function getMenu(school, hallSlug, date, menuTypes = []) {
+  const sub = await resolveSubdomain(school);
   const [year, month, day] = date.split('-');
   const results = { breakfast: [], lunch: [], dinner: [] };
 
   let resolvedTypes = menuTypes;
   if (!resolvedTypes.length) {
-    resolvedTypes = await fetchMenuTypesForHall(school, hallSlug);
+    resolvedTypes = await fetchMenuTypesForHall(sub, hallSlug);
   }
   const categories = resolvedTypes.length > 0
     ? categorizeMealTypes(resolvedTypes)
@@ -160,10 +199,10 @@ async function getMenu(school, hallSlug, date, menuTypes = []) {
     const items = [];
     for (const mt of types) {
       try {
-        const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
+        const url = `https://${sub}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
         const response = await axios.get(url, {
           timeout: 12000,
-          headers: apiHeaders(school),
+          headers: apiHeaders(sub),
         });
         const days = response.data?.days || [];
         const todayData = days.find(d => d.date === date);
@@ -198,13 +237,15 @@ function parseMenuItems(rawItems, mealType) {
         name: food.name,
         description: food.ingredients || '',
         mealType,
+        // Some schools (e.g. UW-Madison) leave the standard fields null and put
+        // the values in g_*/mg_* keys instead — fall back to those.
         calories: Number(nutrition.calories) || 0,
-        protein: Number(nutrition.protein) || 0,
-        carbs: Number(nutrition.total_carb) || 0,
-        fat: Number(nutrition.total_fat) || 0,
-        fiber: Number(nutrition.dietary_fiber) || 0,
-        sugar: Number(nutrition.sugar) || 0,
-        sodium: Number(nutrition.sodium) || 0,
+        protein: Number(nutrition.protein ?? nutrition.g_protein) || 0,
+        carbs: Number(nutrition.total_carb ?? nutrition.g_carbs) || 0,
+        fat: Number(nutrition.total_fat ?? nutrition.g_fat) || 0,
+        fiber: Number(nutrition.dietary_fiber ?? nutrition.g_fiber) || 0,
+        sugar: Number(nutrition.sugar ?? nutrition.g_sugar) || 0,
+        sodium: Number(nutrition.sodium ?? nutrition.mg_sodium) || 0,
         servingSize: food.serving_size_info?.serving_size_description || food.serving_size || '',
         isVegan: food.is_vegan || tags.some(t => t.includes('vegan')) || false,
         isVegetarian: food.is_vegetarian || tags.some(t => t.includes('vegetarian') || t === 'veg') || false,
@@ -223,6 +264,7 @@ function parseMenuItems(rawItems, mealType) {
 }
 
 async function getMenuMultiHall(school, hallMap, date) {
+  const sub = await resolveSubdomain(school);
   const [year, month, day] = date.split('-');
   const results = { breakfast: [], lunch: [], dinner: [] };
 
@@ -230,7 +272,7 @@ async function getMenuMultiHall(school, hallMap, date) {
     if (!hall || !hall.slug) return;
     let menuTypes = hall.menuTypes || [];
     if (!menuTypes.length) {
-      menuTypes = await fetchMenuTypesForHall(school, hall.slug);
+      menuTypes = await fetchMenuTypesForHall(sub, hall.slug);
     }
     const categories = menuTypes.length > 0
       ? categorizeMealTypes(menuTypes)
@@ -240,8 +282,8 @@ async function getMenuMultiHall(school, hallMap, date) {
     const items = [];
     for (const mt of types) {
       try {
-        const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hall.slug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
-        const response = await axios.get(url, { timeout: 12000, headers: apiHeaders(school) });
+        const url = `https://${sub}.api.nutrislice.com/menu/api/weeks/school/${hall.slug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
+        const response = await axios.get(url, { timeout: 12000, headers: apiHeaders(sub) });
         const days = response.data?.days || [];
         const todayData = days.find(d => d.date === date);
         if (!todayData) continue;

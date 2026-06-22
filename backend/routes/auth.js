@@ -209,6 +209,81 @@ router.delete('/favorites/:foodId', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Daily food log ---
+
+router.post('/log', authMiddleware, async (req, res) => {
+  const { date, name, calories, protein, carbs, fat } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const entry = await prisma.foodLog.create({
+      data: {
+        userId: req.userId,
+        date: date || new Date().toISOString().split('T')[0],
+        name: name.trim(),
+        calories: Math.round(Number(calories) || 0),
+        protein: Number(protein) || 0,
+        carbs: Number(carbs) || 0,
+        fat: Number(fat) || 0,
+      },
+    });
+    res.status(201).json({ entry });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to log food' });
+  }
+});
+
+router.get('/log', authMiddleware, async (req, res) => {
+  const date = req.query.date || new Date().toISOString().split('T')[0];
+  try {
+    const entries = await prisma.foodLog.findMany({
+      where: { userId: req.userId, date },
+      orderBy: { createdAt: 'desc' },
+    });
+    const totals = entries.reduce(
+      (a, e) => ({
+        calories: a.calories + e.calories,
+        protein: a.protein + e.protein,
+        carbs: a.carbs + e.carbs,
+        fat: a.fat + e.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+    res.json({ date, entries, totals });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load food log' });
+  }
+});
+
+router.get('/log/monthly', authMiddleware, async (req, res) => {
+  const month = req.query.month || new Date().toISOString().slice(0, 7); // YYYY-MM
+  try {
+    const entries = await prisma.foodLog.findMany({
+      where: { userId: req.userId, date: { startsWith: month } },
+    });
+    const byDate = {};
+    for (const e of entries) {
+      if (!byDate[e.date]) byDate[e.date] = { date: e.date, calories: 0, protein: 0, carbs: 0, fat: 0 };
+      byDate[e.date].calories += e.calories;
+      byDate[e.date].protein  += e.protein;
+      byDate[e.date].carbs    += e.carbs;
+      byDate[e.date].fat      += e.fat;
+    }
+    const days = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ month, days });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load monthly log' });
+  }
+});
+
+router.delete('/log/:id', authMiddleware, async (req, res) => {
+  try {
+    await prisma.foodLog.deleteMany({ where: { id: req.params.id, userId: req.userId } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove log entry' });
+  }
+});
+
 router.post('/history/:id/share', authMiddleware, async (req, res) => {
   try {
     const entry = await prisma.mealHistory.findUnique({ where: { id: req.params.id } });

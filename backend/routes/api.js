@@ -85,6 +85,38 @@ router.post('/meal-plan/generate', optionalAuth, async (req, res, next) => {
   }
 });
 
+router.post('/meal-plan/swap', optionalAuth, async (req, res, next) => {
+  const { school, hallSlug, mealType, date, menuTypes,
+          goals, restrictions, keptItems, excludeIds } = req.body;
+  if (!school || !hallSlug || !mealType || !goals)
+    return res.status(400).json({ error: 'school, hallSlug, mealType and goals are required' });
+  if (!['breakfast', 'lunch', 'dinner'].includes(mealType))
+    return res.status(400).json({ error: 'invalid mealType' });
+
+  try {
+    const menuDate = date || new Date().toISOString().split('T')[0];
+    const menu = await nutrislice.getMenu(school, hallSlug, menuDate, menuTypes || []);
+    let candidates = mealPlanner.filterByRestrictions(menu[mealType] || [], restrictions || []);
+
+    const exclude = new Set((excludeIds || []).map(String));
+    candidates = candidates.filter(item => !exclude.has(String(item.id)));
+
+    if (!candidates.length) return res.json({ item: null });
+
+    let favorites = [];
+    if (req.userId) {
+      try {
+        favorites = await prisma.favoriteFood.findMany({ where: { userId: req.userId } });
+      } catch {}
+    }
+
+    const item = mealPlanner.selectSwap(candidates, mealType, goals, keptItems || [], favorites);
+    res.json({ item: item || null });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/share/:token', async (req, res) => {
   try {
     const entry = await prisma.mealHistory.findUnique({

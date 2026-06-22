@@ -37,6 +37,10 @@ interface AuthContextType {
   addFavorite: (item: unknown) => Promise<unknown>;
   removeFavorite: (foodId: string) => Promise<unknown>;
   shareHistory: (id: string) => Promise<unknown>;
+  addLog: (entry: { date?: string; name: string; calories: number; protein: number; carbs: number; fat: number }) => Promise<unknown>;
+  getLog: (date?: string) => Promise<unknown>;
+  getMonthlyLog: (month?: string) => Promise<unknown>;
+  removeLog: (id: string) => Promise<unknown>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -86,9 +90,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addFavorite = useCallback((item: unknown) => authService.addFavorite(item), []);
   const removeFavorite = useCallback((foodId: string) => authService.removeFavorite(foodId), []);
   const shareHistory = useCallback((id: string) => authService.shareHistory(id), []);
+  const addLog = useCallback((entry: Parameters<AuthContextType['addLog']>[0]) => authService.addLog(entry), []);
+  const getLog = useCallback((date?: string) => authService.getLog(date), []);
+  const getMonthlyLog = useCallback((month?: string) => authService.getMonthlyLog(month), []);
+  const removeLog = useCallback((id: string) => authService.removeLog(id), []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, saveGoals, saveHistory, getHistory, getHistoryStats, getFavorites, addFavorite, removeFavorite, shareHistory }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, saveGoals, saveHistory, getHistory, getHistoryStats, getFavorites, addFavorite, removeFavorite, shareHistory, addLog, getLog, getMonthlyLog, removeLog }}>
       {children}
     </AuthContext.Provider>
   );
