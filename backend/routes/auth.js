@@ -18,7 +18,7 @@ const userShape = (u) => ({
     protein: u.goals.protein,
     carbs: u.goals.carbs,
     fat: u.goals.fat,
-    restrictions: JSON.parse(u.goals.restrictions || '[]'),
+    restrictions: (() => { try { return JSON.parse(u.goals.restrictions || '[]'); } catch { return []; } })(),
   } : null,
 });
 
@@ -26,8 +26,8 @@ router.post('/register', async (req, res) => {
   const { email, password, firstName, lastName } = req.body;
   if (!email || !password || !firstName || !lastName)
     return res.status(400).json({ error: 'All fields required' });
-  if (password.length < 6)
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (password.length < 8)
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   try {
     const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (exists) return res.status(400).json({ error: 'Email already registered' });

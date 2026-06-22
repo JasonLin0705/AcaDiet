@@ -11,7 +11,7 @@ import { generateMealPlan } from './services/api';
 const STEPS = ['University', 'Goals', 'Dining Halls', 'Meal Plan'];
 
 function AppContent() {
-  const { user, saveGoals, saveHistory } = useAuth() as any;
+  const { user, saveGoals, saveHistory } = useAuth();
   const [step, setStep] = useState(0);
   const [university, setUniversity] = useState<any>(null);
   const [goals, setGoals] = useState<any>(null);
@@ -30,7 +30,9 @@ function AppContent() {
     setGoals(g);
     setRestrictions(r);
     if (user) {
-      try { await saveGoals({ ...g, restrictions: r }); } catch {}
+      try { await saveGoals({ ...g, restrictions: r }); } catch (err) {
+        console.error('Failed to save goals:', err);
+      }
     }
     setStep(2);
   }, [user, saveGoals]);
@@ -63,12 +65,19 @@ function AppContent() {
             plan,
             totals: plan.totals,
           });
-        } catch {}
+        } catch (err) {
+          console.error('Failed to save history:', err);
+        }
       }
     } catch (err: any) {
-      const msg = err.noMenuData
-        ? "No menu data available. These dining halls may be closed or menus haven't been published yet."
-        : (err.message || 'Failed to generate meal plan');
+      let msg: string;
+      if (err.noMenuData) {
+        msg = "No menu data found for today. These dining halls may be closed or menus haven't been published yet.";
+      } else if (!err.response && (err.code === 'ERR_NETWORK' || err.message === 'Network Error')) {
+        msg = "Can't reach the server. Check your connection and try again.";
+      } else {
+        msg = err.response?.data?.error || err.message || 'Failed to generate meal plan';
+      }
       setGenError(msg);
     } finally {
       setGenerating(false);
@@ -127,7 +136,18 @@ function AppContent() {
             <svg className="w-5 h-5 shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <span><strong>Error:</strong> {genError}</span>
+            <div className="flex-1">
+              <span><strong>Error:</strong> {genError}</span>
+              {hallSelections && (
+                <button
+                  onClick={handleRegenerate}
+                  disabled={generating}
+                  className="ml-2 underline font-semibold hover:text-red-900 disabled:opacity-50"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
           </div>
         )}
 
