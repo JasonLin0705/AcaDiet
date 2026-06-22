@@ -75,7 +75,6 @@ async function getDiningHalls(school) {
   });
   const data = response.data;
   const list = Array.isArray(data) ? data : (data.schools || []);
-  if (list.length > 0) console.log('[getDiningHalls] first school raw:', JSON.stringify(list[0]).slice(0, 800));
   return list.map(s => ({
     id: s.id,
     name: s.name,
@@ -102,20 +101,18 @@ async function fetchMenuTypesForHall(school, hallSlug) {
   ];
   for (const url of attempts) {
     try {
-      console.log('[fetchMenuTypes] trying', url);
       const response = await axios.get(url, { timeout: 8000, headers: apiHeaders(school) });
       const data = response.data;
       const types = Array.isArray(data) ? data : (data.menu_types || data.results || data.menuTypes || []);
       if (types.length > 0) {
-        console.log('[fetchMenuTypes] success:', JSON.stringify(types).slice(0, 400));
         return types.map(mt => ({
           label: (mt.name || mt.slug || '').toLowerCase(),
           slug: mt.slug || String(mt.id || ''),
           id: mt.id,
         })).filter(mt => mt.slug);
       }
-    } catch (err) {
-      console.log('[fetchMenuTypes] failed:', err.message);
+    } catch {
+      // try next URL pattern
     }
   }
   return [];
@@ -164,7 +161,6 @@ async function getMenu(school, hallSlug, date, menuTypes = []) {
     for (const mt of types) {
       try {
         const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hallSlug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
-        console.log(`[getMenu] fetching ${mealPeriod}:`, url);
         const response = await axios.get(url, {
           timeout: 12000,
           headers: apiHeaders(school),
@@ -173,17 +169,12 @@ async function getMenu(school, hallSlug, date, menuTypes = []) {
         const todayData = days.find(d => d.date === date);
         if (!todayData) continue;
         items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
-      } catch (err) {
-        console.log(`[getMenu] error for ${mealPeriod}/${mt.slug}:`, err.message);
+      } catch {
+        // hall or menu-type may not have data for this date
       }
     }
     results[mealPeriod] = items;
   }));
-
-  const totalItems = results.breakfast.length + results.lunch.length + results.dinner.length;
-  if (totalItems === 0) {
-    console.log('[getMenu] No menu items found for', school, hallSlug, date, '— hall may be closed or menus not yet published');
-  }
 
   return results;
 }
@@ -250,23 +241,18 @@ async function getMenuMultiHall(school, hallMap, date) {
     for (const mt of types) {
       try {
         const url = `https://${school}.api.nutrislice.com/menu/api/weeks/school/${hall.slug}/menu-type/${mt.slug}/${year}/${month}/${day}/`;
-        console.log(`[getMenuMultiHall] ${mealPeriod} from ${hall.slug}:`, url);
         const response = await axios.get(url, { timeout: 12000, headers: apiHeaders(school) });
         const days = response.data?.days || [];
         const todayData = days.find(d => d.date === date);
         if (!todayData) continue;
         items.push(...parseMenuItems(todayData.menu_items || [], mealPeriod));
-      } catch (err) {
-        console.log(`[getMenuMultiHall] error ${mealPeriod}/${mt.slug}:`, err.message);
+      } catch {
+        // hall or menu-type may not have data for this date
       }
     }
     results[mealPeriod] = items;
   }));
 
-  const totalItems = results.breakfast.length + results.lunch.length + results.dinner.length;
-  if (totalItems === 0) {
-    console.log('[getMenuMultiHall] No menu items found — halls may be closed or menus not yet published');
-  }
   return results;
 }
 
