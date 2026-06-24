@@ -246,7 +246,17 @@ function parseMenuItems(rawItems, mealType) {
         fiber: Number(nutrition.dietary_fiber ?? nutrition.g_fiber) || 0,
         sugar: Number(nutrition.sugar ?? nutrition.g_sugar) || 0,
         sodium: Number(nutrition.sodium ?? nutrition.mg_sodium) || 0,
-        servingSize: food.serving_size_info?.serving_size_description || food.serving_size || '',
+        // Serving size lives in serving_size_info. Most schools (e.g. VT) only
+        // populate amount + unit (e.g. "3" + "oz"), not a prose description, so
+        // compose them; fall back to a description or a bare serving_size field.
+        servingSize: (() => {
+          const ssi = food.serving_size_info || {};
+          const amountUnit = [ssi.serving_size_amount, ssi.serving_size_unit]
+            .filter(v => v != null && String(v).trim() !== '')
+            .join(' ')
+            .trim();
+          return ssi.serving_size_description || amountUnit || food.serving_size || '';
+        })(),
         isVegan: food.is_vegan || tags.some(t => t.includes('vegan')) || false,
         isVegetarian: food.is_vegetarian || tags.some(t => t.includes('vegetarian') || t === 'veg') || false,
         isGlutenFree: tags.some(t => t.includes('gluten')) || false,
