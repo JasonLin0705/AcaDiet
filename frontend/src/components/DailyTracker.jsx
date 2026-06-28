@@ -13,16 +13,37 @@ const MACRO_FIELDS = [
   { key: 'fat', label: 'Fat', placeholder: 'g' },
 ];
 
-export default function DailyTracker({ goals, favorites = [] }) {
-  const { getLog, addLog, removeLog } = useAuth();
+function currentMeal() {
+  const h = new Date().getHours() + new Date().getMinutes() / 60;
+  if (h < 10.5) return 'breakfast';
+  if (h < 16) return 'lunch';
+  return 'dinner';
+}
+
+const MEAL_LABEL = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner' };
+
+export default function DailyTracker({ goals, favorites = [], university = null, hallSelections = null }) {
+  const { getLog, addLog, removeLog, eatNow } = useAuth();
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState(EMPTY_TOTALS);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('day');
+  const [eatLoading, setEatLoading] = useState(false);
+  const [eatError, setEatError] = useState(null);
+  const [eatResult, setEatResult] = useState(null);
 
   const g = goals || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+  const hallForMeal = (meal) =>
+    hallSelections?.[`${meal}Hall`] ||
+    hallSelections?.breakfastHall ||
+    hallSelections?.lunchHall ||
+    hallSelections?.dinnerHall ||
+    null;
+
+  const canEatNow = !!(university?.subdomain && hallForMeal(currentMeal())?.slug);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +92,42 @@ export default function DailyTracker({ goals, favorites = [] }) {
     load();
   };
 
+  const runEatNow = async () => {
+    const meal = currentMeal();
+    const hall = hallForMeal(meal);
+    if (!university?.subdomain || !hall?.slug || eatLoading) return;
+    setEatLoading(true);
+    setEatError(null);
+    try {
+      const data = await eatNow({
+        school: university.subdomain,
+        hallSlug: hall.slug,
+        hallName: hall.name,
+        menuTypes: hall.menuTypes,
+        mealType: meal,
+      });
+      setEatResult(data);
+    } catch (err) {
+      setEatError(err?.message || 'Could not load live suggestions. The hall may be closed or have no menu posted.');
+      setEatResult(null);
+    } finally {
+      setEatLoading(false);
+    }
+  };
+
+  const addRecommendation = async (item) => {
+    try {
+      await addLog({
+        name: item.name,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+      });
+      await load();
+    } catch {}
+  };
+
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
@@ -106,6 +163,85 @@ export default function DailyTracker({ goals, favorites = [] }) {
           <MacroRing label="Carbs"    current={totals.carbs}    target={g.carbs}    color="orange" unit="g" />
           <MacroRing label="Fat"      current={totals.fat}      target={g.fat}      color="purple" unit="g" />
         </div>
+      </div>
+
+      {/* Eat Now — live suggestions against remaining macros */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-gray-900">Eat now</h3>
+          {eatResult && (
+            <span className="text-[11px] text-gray-400 capitalize">{MEAL_LABEL[eatResult.mealType] || eatResult.mealType}</span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          What to grab right now, scored against the macros you have left today.
+        </p>
+
+        {!canEatNow ? (
+          <div className="text-center py-5 px-3 bg-gray-50 rounded-xl">
+            <p className="text-sm text-gray-500">Pick a dining hall in the <span className="font-semibold text-gray-700">Plan</span> tab to get live suggestions.</p>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={runEatNow}
+              disabled={eatLoading}
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold hover:from-amber-600 hover:to-orange-600 active:scale-[0.98] transition-all shadow-md shadow-amber-200/50 disabled:opacity-40 text-sm"
+            >
+              {eatLoading ? 'Finding options…' : eatResult ? 'Refresh suggestions' : 'What should I eat right now?'}
+            </button>
+
+            {eatError && (
+              <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{eatError}</p>
+            )}
+
+            {eatResult && !eatLoading && (
+              <div className="mt-4">
+                {eatResult.atGoal ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <p className="text-3xl mb-2">🎉</p>
+                    <p className="text-sm">You've hit your goals for today — nicely done.</p>
+                  </div>
+                ) : (eatResult.recommendations || []).length === 0 ? (
+                  <div className="text-center py-6 text-gray-400">
+                    <p className="text-sm">Nothing on the {MEAL_LABEL[eatResult.mealType] || eatResult.mealType} menu fits your remaining budget right now.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-gray-400 mb-1">
+                      ~{Math.max(0, Math.round(eatResult.remaining?.calories || 0))} kcal · {Math.max(0, Math.round(eatResult.remaining?.protein || 0))}g protein left
+                    </p>
+                    {eatResult.recommendations.map((item, i) => (
+                      <div key={item.id || i} className="flex items-center gap-3 p-3.5 bg-white rounded-xl border border-gray-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+                          {item.servingSize && (
+                            <p className="text-[11px] text-gray-400 mt-0.5">{item.servingSize}</p>
+                          )}
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="text-[11px] text-blue-500 font-medium">{item.protein}g protein</span>
+                            <span className="text-[11px] text-orange-500 font-medium">{item.carbs}g carbs</span>
+                            <span className="text-[11px] text-purple-500 font-medium">{item.fat}g fat</span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-base font-bold text-gray-900">{item.calories}</div>
+                          <div className="text-[10px] text-gray-400 uppercase tracking-wide">kcal</div>
+                        </div>
+                        <button
+                          onClick={() => addRecommendation(item)}
+                          className="shrink-0 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-200 active:scale-95 transition-all"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Add food */}

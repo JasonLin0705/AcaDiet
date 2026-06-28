@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const authMiddleware = require('../auth');
+const nutrislice = require('../services/nutrislice');
+const mealPlanner = require('../services/mealPlanner');
 
 const prisma = new PrismaClient();
 
@@ -281,6 +283,81 @@ router.delete('/log/:id', authMiddleware, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to remove log entry' });
+  }
+});
+
+// "Eat Now" — given the macros a user has LEFT today, suggest what to grab right
+// now from the live menu of a chosen hall. Combines the food log (consumed),
+// their goals (remaining = goals - consumed), and the deterministic planner.
+const mealByHour = (h) => (h < 10.5 ? 'breakfast' : h < 16 ? 'lunch' : 'dinner');
+
+router.post('/eat-now', authMiddleware, async (req, res) => {
+  const { school, hallSlug, hallName, menuTypes, mealType, date } = req.body;
+  if (!school || !hallSlug)
+    return res.status(400).json({ error: 'school and hallSlug are required' });
+  try {
+    const goalsRow = await prisma.userGoals.findUnique({ where: { userId: req.userId } });
+    if (!goalsRow) return res.status(400).json({ error: 'Set your macro goals first' });
+    const restrictions = (() => {
+      try { return JSON.parse(goalsRow.restrictions || '[]'); } catch { return []; }
+    })();
+
+    const day = date || new Date().toISOString().split('T')[0];
+    const logs = await prisma.foodLog.findMany({ where: { userId: req.userId, date: day } });
+    const consumed = logs.reduce(
+      (a, e) => ({
+        calories: a.calories + e.calories,
+        protein:  a.protein  + e.protein,
+        carbs:    a.carbs    + e.carbs,
+        fat:      a.fat      + e.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    const remaining = {
+      calories: goalsRow.calories - consumed.calories,
+      protein:  Math.max(goalsRow.protein - consumed.protein, 0),
+      carbs:    Math.max(goalsRow.carbs   - consumed.carbs,   0),
+      fat:      Math.max(goalsRow.fat     - consumed.fat,     0),
+    };
+
+    const now = new Date();
+    const meal = mealType || mealByHour(now.getHours() + now.getMinutes() / 60);
+
+    const menu = await nutrislice.getMenu(school, hallSlug, day, menuTypes || []);
+    const items = menu[meal] || [];
+    const labeled = hallName ? items.map(i => ({ ...i, hallName })) : items;
+    const filtered = mealPlanner.filterByRestrictions(labeled, restrictions);
+
+    const favorites = await prisma.favoriteFood
+      .findMany({ where: { userId: req.userId } })
+      .catch(() => []);
+
+    const atGoal = remaining.calories <= 0;
+    const recommendations = atGoal
+      ? []
+      : mealPlanner.recommendForRemaining(filtered, remaining, favorites, 8);
+    const plate = atGoal
+      ? []
+      : mealPlanner.buildPlate(filtered, remaining, favorites, 4);
+
+    res.json({
+      mealType: meal,
+      date: day,
+      remaining,
+      consumed,
+      goals: {
+        calories: goalsRow.calories, protein: goalsRow.protein,
+        carbs: goalsRow.carbs, fat: goalsRow.fat,
+      },
+      recommendations,
+      plate,
+      availableCount: filtered.length,
+      atGoal,
+    });
+  } catch (err) {
+    const status = err.code === 'ECONNREFUSED' || err.response?.status === 404 ? 404 : 502;
+    res.status(status).json({ error: 'Could not load the live menu', detail: err.message });
   }
 });
 

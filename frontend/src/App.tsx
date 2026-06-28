@@ -315,7 +315,7 @@ function AppContent() {
       <Header view={view} onChangeView={setView} />
       <main className="max-w-2xl mx-auto px-4 py-8 pb-20">
         {view === 'today' && user ? (
-          <DailyTracker goals={user.goals} favorites={favorites} />
+          <DailyTracker goals={user.goals} favorites={favorites} university={university} hallSelections={hallSelections} />
         ) : (
         <>
         <div className="mb-8">

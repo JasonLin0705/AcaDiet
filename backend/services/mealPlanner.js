@@ -67,6 +67,48 @@ function selectBestItems(items, mealType, goals, favorites = []) {
   return selected;
 }
 
+// Rank individual menu items by how well each fills an EXPLICIT remaining-macro
+// budget (not the per-meal ratio used by selectBestItems). Powers "Eat Now":
+// given the macros a user has left today, what's best to grab right now.
+function recommendForRemaining(items, remaining, favorites = [], max = 8) {
+  return items
+    .map(item => ({ item, score: scoreItem(item, remaining, favorites) }))
+    .filter(s => s.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(s => s.item);
+}
+
+// Greedily assemble a small plate that fills an explicit remaining budget —
+// same selection logic as selectBestItems, but against macros-left-today.
+function buildPlate(items, remaining, favorites = [], maxItems = 4) {
+  const budget = { ...remaining };
+  const startCal = Math.max(budget.calories, 1);
+  const pool = [...items];
+  const selected = [];
+
+  for (let i = 0; i < maxItems && pool.length > 0; i++) {
+    const scored = pool
+      .map((item, idx) => ({ item, idx, score: scoreItem(item, budget, favorites) }))
+      .filter(s => s.score >= 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (!scored.length) break;
+
+    const { item, idx } = scored[0];
+    selected.push(item);
+    budget.calories -= item.calories;
+    budget.protein -= item.protein;
+    budget.carbs -= item.carbs;
+    budget.fat -= item.fat;
+    pool.splice(idx, 1);
+
+    if (budget.calories <= startCal * 0.10) break;
+  }
+
+  return selected;
+}
+
 function sumNutrition(items) {
   return items.reduce(
     (acc, item) => ({
@@ -146,4 +188,7 @@ function generate(menu, goals, restrictions, userContext = {}) {
   };
 }
 
-module.exports = { generate, selectSwap, filterByRestrictions, scoreItem, MEAL_RATIOS };
+module.exports = {
+  generate, selectSwap, filterByRestrictions, scoreItem, MEAL_RATIOS,
+  recommendForRemaining, buildPlate,
+};

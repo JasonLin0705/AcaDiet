@@ -41,6 +41,14 @@ interface AuthContextType {
   getLog: (date?: string) => Promise<unknown>;
   getMonthlyLog: (month?: string) => Promise<unknown>;
   removeLog: (id: string) => Promise<unknown>;
+  eatNow: (payload: {
+    school: string;
+    hallSlug: string;
+    hallName?: string;
+    menuTypes?: unknown[];
+    mealType?: string;
+    date?: string;
+  }) => Promise<unknown>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -94,9 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getLog = useCallback((date?: string) => authService.getLog(date), []);
   const getMonthlyLog = useCallback((month?: string) => authService.getMonthlyLog(month), []);
   const removeLog = useCallback((id: string) => authService.removeLog(id), []);
+  const eatNow = useCallback((payload: Parameters<AuthContextType['eatNow']>[0]) => authService.eatNow(payload), []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, saveGoals, saveHistory, getHistory, getHistoryStats, getFavorites, addFavorite, removeFavorite, shareHistory, addLog, getLog, getMonthlyLog, removeLog }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, saveGoals, saveHistory, getHistory, getHistoryStats, getFavorites, addFavorite, removeFavorite, shareHistory, addLog, getLog, getMonthlyLog, removeLog, eatNow }}>
       {children}
     </AuthContext.Provider>
   );

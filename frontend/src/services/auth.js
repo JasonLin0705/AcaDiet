@@ -30,4 +30,5 @@ export const authService = {
   getLog: (date) => req(`/log${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   getMonthlyLog: (month) => req('/log/monthly' + (month ? '?month=' + encodeURIComponent(month) : '')),
   removeLog: (id) => req(`/log/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  eatNow: (payload) => req('/eat-now', { method: 'POST', body: JSON.stringify(payload) }),
 };
