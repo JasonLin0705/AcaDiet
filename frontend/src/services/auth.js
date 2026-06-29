@@ -31,4 +31,5 @@ export const authService = {
   getMonthlyLog: (month) => req('/log/monthly' + (month ? '?month=' + encodeURIComponent(month) : '')),
   removeLog: (id) => req(`/log/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   eatNow: (payload) => req('/eat-now', { method: 'POST', body: JSON.stringify(payload) }),
+  favoritesToday: (payload) => req('/favorites-today', { method: 'POST', body: JSON.stringify(payload) }),
 };

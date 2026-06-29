@@ -361,6 +361,50 @@ router.post('/eat-now', authMiddleware, async (req, res) => {
   }
 });
 
+// "Today at your halls" — which of the user's favorited dishes are on today's
+// live menu, and where (hall + meal). Matches by Nutrislice food id, falling
+// back to a normalized name match for ids that drift between days.
+const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+router.post('/favorites-today', authMiddleware, async (req, res) => {
+  const { school, breakfastHall, lunchHall, dinnerHall, hall, date } = req.body;
+  if (!school) return res.status(400).json({ error: 'school is required' });
+  try {
+    const favs = await prisma.favoriteFood.findMany({ where: { userId: req.userId } });
+    const day = date || new Date().toISOString().split('T')[0];
+    if (!favs.length) return res.json({ date: day, favoritesCount: 0, matches: [] });
+
+    const fallback = breakfastHall || lunchHall || dinnerHall || (hall ? { slug: hall } : null);
+    if (!fallback) return res.status(400).json({ error: 'a dining hall is required' });
+    const hallMap = {
+      breakfast: breakfastHall || fallback,
+      lunch:     lunchHall     || fallback,
+      dinner:    dinnerHall    || fallback,
+    };
+
+    const menu = await nutrislice.getMenuMultiHall(school, hallMap, day);
+
+    const favById = new Map(favs.map(f => [String(f.foodId), f]));
+    const favByName = new Map(favs.map(f => [normName(f.foodName), f]));
+    const matches = new Map(); // foodId -> { favorite, locations: [] }
+
+    for (const meal of ['breakfast', 'lunch', 'dinner']) {
+      const hallName = hallMap[meal]?.name || hallMap[meal]?.slug || '';
+      for (const item of (menu[meal] || [])) {
+        const fav = favById.get(String(item.id)) || favByName.get(normName(item.name));
+        if (!fav) continue;
+        if (!matches.has(fav.foodId)) matches.set(fav.foodId, { favorite: fav, locations: [] });
+        matches.get(fav.foodId).locations.push({ hallName, mealType: meal, item });
+      }
+    }
+
+    res.json({ date: day, favoritesCount: favs.length, matches: [...matches.values()] });
+  } catch (err) {
+    const status = err.code === 'ECONNREFUSED' || err.response?.status === 404 ? 404 : 502;
+    res.status(status).json({ error: 'Could not load the live menu', detail: err.message });
+  }
+});
+
 router.post('/history/:id/share', authMiddleware, async (req, res) => {
   try {
     const entry = await prisma.mealHistory.findUnique({ where: { id: req.params.id } });

@@ -23,7 +23,7 @@ function currentMeal() {
 const MEAL_LABEL = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner' };
 
 export default function DailyTracker({ goals, favorites = [], university = null, hallSelections = null }) {
-  const { getLog, addLog, removeLog, eatNow } = useAuth();
+  const { getLog, addLog, removeLog, eatNow, favoritesToday } = useAuth();
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState(EMPTY_TOTALS);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,9 @@ export default function DailyTracker({ goals, favorites = [], university = null,
   const [eatLoading, setEatLoading] = useState(false);
   const [eatError, setEatError] = useState(null);
   const [eatResult, setEatResult] = useState(null);
+  const [favLoading, setFavLoading] = useState(false);
+  const [favError, setFavError] = useState(null);
+  const [favResult, setFavResult] = useState(null);
 
   const g = goals || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
 
@@ -44,6 +47,7 @@ export default function DailyTracker({ goals, favorites = [], university = null,
     null;
 
   const canEatNow = !!(university?.subdomain && hallForMeal(currentMeal())?.slug);
+  const canCheckFavorites = !!(university?.subdomain && hallSelections && favorites.length > 0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +63,28 @@ export default function DailyTracker({ goals, favorites = [], university = null,
   }, [getLog]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadFavoritesToday = useCallback(async () => {
+    if (!university?.subdomain || !hallSelections || favorites.length === 0) return;
+    setFavLoading(true);
+    setFavError(null);
+    try {
+      const data = await favoritesToday({
+        school: university.subdomain,
+        breakfastHall: hallSelections.breakfastHall,
+        lunchHall: hallSelections.lunchHall,
+        dinnerHall: hallSelections.dinnerHall,
+      });
+      setFavResult(data);
+    } catch (err) {
+      setFavError(err?.message || "Could not check your favorites against today's menu.");
+      setFavResult(null);
+    } finally {
+      setFavLoading(false);
+    }
+  }, [favoritesToday, university, hallSelections, favorites.length]);
+
+  useEffect(() => { if (canCheckFavorites) loadFavoritesToday(); }, [canCheckFavorites, loadFavoritesToday]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -243,6 +269,76 @@ export default function DailyTracker({ goals, favorites = [], university = null,
           </>
         )}
       </div>
+
+      {/* Today at your halls — favorites available on today's live menu */}
+      {favorites.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-bold text-gray-900">Today at your halls</h3>
+            {favResult && !favLoading && (
+              <span className="text-[11px] text-gray-400">
+                {(favResult.matches || []).length} of {favResult.favoritesCount} on menu
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mb-3">
+            Which of your favorites are on today's menu, and where.
+          </p>
+
+          {!canCheckFavorites ? (
+            <div className="text-center py-5 px-3 bg-gray-50 rounded-xl">
+              <p className="text-sm text-gray-500">Pick a dining hall in the <span className="font-semibold text-gray-700">Plan</span> tab to see your favorites' availability.</p>
+            </div>
+          ) : favLoading ? (
+            <div className="flex justify-center py-6">
+              <div className="w-6 h-6 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+            </div>
+          ) : favError ? (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{favError}</p>
+          ) : (favResult?.matches || []).length === 0 ? (
+            <div className="text-center py-6 text-gray-400">
+              <p className="text-3xl mb-2">🔍</p>
+              <p className="text-sm">None of your favorites are on the menu today.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {favResult.matches.map((m, i) => {
+                const addItem = m.locations?.[0]?.item || {
+                  name: m.favorite.foodName,
+                  calories: m.favorite.calories,
+                  protein: m.favorite.protein,
+                  carbs: m.favorite.carbs,
+                  fat: m.favorite.fat,
+                };
+                return (
+                  <div key={m.favorite.foodId || i} className="flex items-center gap-3 p-3.5 bg-white rounded-xl border border-gray-100">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{m.favorite.foodName}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {m.locations.map((loc, j) => (
+                          <span key={j} className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 capitalize">
+                            {MEAL_LABEL[loc.mealType] || loc.mealType} · {loc.hallName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-base font-bold text-gray-900">{m.favorite.calories}</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wide">kcal</div>
+                    </div>
+                    <button
+                      onClick={() => addRecommendation(addItem)}
+                      className="shrink-0 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-200 active:scale-95 transition-all"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add food */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
