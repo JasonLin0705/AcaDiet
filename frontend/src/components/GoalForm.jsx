@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { calculateMacros, ACTIVITY_LEVELS } from '../utils/macroCalculator';
 
 const RESTRICTIONS = [
   { id: 'vegetarian', label: 'Vegetarian', icon: '🥦' },
@@ -65,6 +66,41 @@ export default function GoalForm({ onSubmit, onBack, initialGoals, initialRestri
   const [fat, setFat] = useState(initialGoals?.fat || 65);
   const [restrictions, setRestrictions] = useState(initialRestrictions || []);
 
+  // --- Macro calculator (Mifflin–St Jeor BMR → TDEE → goal) ---
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [sex, setSex] = useState('male');
+  const [age, setAge] = useState('');
+  const [heightUnit, setHeightUnit] = useState('imperial'); // 'imperial' | 'metric'
+  const [heightFt, setHeightFt] = useState('');
+  const [heightIn, setHeightIn] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [weightUnit, setWeightUnit] = useState('lb'); // 'lb' | 'kg'
+  const [weight, setWeight] = useState('');
+  const [activity, setActivity] = useState(
+    () => ACTIVITY_LEVELS[2]?.id || ACTIVITY_LEVELS[0]?.id || 'moderate'
+  );
+  const [goal, setGoal] = useState('maintain');
+  const [calcError, setCalcError] = useState('');
+  const [calcResult, setCalcResult] = useState(null);
+
+  const runCalculator = () => {
+    setCalcError('');
+    const a = Number(age);
+    const cm = heightUnit === 'metric'
+      ? Number(heightCm)
+      : (Number(heightFt) * 12 + Number(heightIn || 0)) * 2.54;
+    const kg = weightUnit === 'kg' ? Number(weight) : Number(weight) * 0.453592;
+    if (!a || a < 13 || a > 100) { setCalcError('Enter a valid age (13–100).'); return; }
+    if (!cm || cm < 120 || cm > 230) { setCalcError('Enter a valid height.'); return; }
+    if (!kg || kg < 30 || kg > 250) { setCalcError('Enter a valid weight.'); return; }
+    const r = calculateMacros({ sex, age: a, heightCm: cm, weightKg: kg, activity, goal });
+    setCalories(r.calories);
+    setProtein(r.protein);
+    setCarbs(r.carbs);
+    setFat(r.fat);
+    setCalcResult(r);
+  };
+
   const macroCalories = protein * 4 + carbs * 4 + fat * 9;
   const calDiff = macroCalories - calories;
   const balanced = Math.abs(calDiff) < 150;
@@ -81,6 +117,131 @@ export default function GoalForm({ onSubmit, onBack, initialGoals, initialRestri
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Macro calculator */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setCalcOpen((o) => !o)}
+          className="w-full flex items-center justify-between p-5 text-left"
+        >
+          <div>
+            <h2 className="text-base font-bold text-gray-900">✨ Not sure? Calculate my macros</h2>
+            <p className="text-sm text-gray-500">Estimate your targets from your body stats &amp; goal.</p>
+          </div>
+          <svg className={`w-5 h-5 text-gray-400 transition-transform ${calcOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {calcOpen && (
+          <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+            {/* Sex */}
+            <div className="grid grid-cols-2 gap-2">
+              {['male', 'female'].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSex(s)}
+                  className={`py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                    sex === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'
+                  }`}
+                >
+                  {s === 'male' ? 'Male' : 'Female'}
+                </button>
+              ))}
+            </div>
+
+            {/* Age + Weight */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Age</label>
+                <input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="years"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              </div>
+              <div>
+                <label className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-1">
+                  <span>Weight</span>
+                  <span className="inline-flex bg-gray-100 rounded-md p-0.5">
+                    {['lb', 'kg'].map((u) => (
+                      <button key={u} type="button" onClick={() => setWeightUnit(u)}
+                        className={`px-1.5 rounded text-[11px] font-bold ${weightUnit === u ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400'}`}>{u}</button>
+                    ))}
+                  </span>
+                </label>
+                <input type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder={weightUnit}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              </div>
+            </div>
+
+            {/* Height */}
+            <div>
+              <label className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-1">
+                <span>Height</span>
+                <span className="inline-flex bg-gray-100 rounded-md p-0.5">
+                  {[['imperial', 'ft/in'], ['metric', 'cm']].map(([u, lbl]) => (
+                    <button key={u} type="button" onClick={() => setHeightUnit(u)}
+                      className={`px-1.5 rounded text-[11px] font-bold ${heightUnit === u ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400'}`}>{lbl}</button>
+                  ))}
+                </span>
+              </label>
+              {heightUnit === 'imperial' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="number" inputMode="numeric" value={heightFt} onChange={(e) => setHeightFt(e.target.value)} placeholder="ft"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  <input type="number" inputMode="numeric" value={heightIn} onChange={(e) => setHeightIn(e.target.value)} placeholder="in"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+              ) : (
+                <input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="cm"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              )}
+            </div>
+
+            {/* Activity */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Activity level</label>
+              <select value={activity} onChange={(e) => setActivity(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                {ACTIVITY_LEVELS.map((lvl) => (
+                  <option key={lvl.id} value={lvl.id}>{lvl.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Goal */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Goal</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[['cut', 'Lose'], ['maintain', 'Maintain'], ['bulk', 'Gain']].map(([g, lbl]) => (
+                  <button key={g} type="button" onClick={() => setGoal(g)}
+                    className={`py-2 rounded-xl text-sm font-semibold border transition-all ${
+                      goal === g ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'
+                    }`}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+
+            {calcError && <p className="text-xs font-semibold text-amber-600">{calcError}</p>}
+
+            <button type="button" onClick={runCalculator}
+              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm">
+              Calculate
+            </button>
+
+            {calcResult && (
+              <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
+                <p className="text-sm font-semibold text-emerald-800">
+                  Based on your stats: {calcResult.calories.toLocaleString()} kcal · {calcResult.protein}g protein · {calcResult.carbs}g carbs · {calcResult.fat}g fat
+                </p>
+                <p className="text-[11px] text-emerald-600 mt-1">
+                  BMR {Math.round(calcResult.bmr)} kcal · maintenance {Math.round(calcResult.tdee)} kcal. Applied to your sliders — fine-tune below.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Calories + Macros card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-1">
