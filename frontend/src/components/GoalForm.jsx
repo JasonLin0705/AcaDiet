@@ -67,7 +67,7 @@ export default function GoalForm({ onSubmit, onBack, initialGoals, initialRestri
   const [restrictions, setRestrictions] = useState(initialRestrictions || []);
 
   // --- Macro calculator (Mifflin–St Jeor BMR → TDEE → goal) ---
-  const [calcOpen, setCalcOpen] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(true);
   const [sex, setSex] = useState('male');
   const [age, setAge] = useState('');
   const [heightUnit, setHeightUnit] = useState('imperial'); // 'imperial' | 'metric'
